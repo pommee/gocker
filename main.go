@@ -82,6 +82,7 @@ func CreateContainerList(app *tview.Application) *tview.Table {
 		table.SetCell(0, i,
 			tview.NewTableCell(header).
 				SetTextColor(tcell.ColorCornflowerBlue).
+				SetExpansion(1).
 				SetSelectable(false))
 	}
 
@@ -95,50 +96,23 @@ func CreateContainerList(app *tview.Application) *tview.Table {
 			log.Fatalf("Error getting container info: %v", err)
 		}
 
-		idCell := tview.NewTableCell(containerInfo.ID).
-			SetTextColor(tcell.ColorWhite).
-			SetExpansion(1)
-
-		nameCell := tview.NewTableCell(containerInfo.Name).
-			SetTextColor(tcell.ColorWhite).
-			SetExpansion(2)
-
-		imageCell := tview.NewTableCell(containerInfo.Image).
-			SetTextColor(tcell.ColorWhite).
-			SetExpansion(1)
-
-		uptimeCell := tview.NewTableCell(containerInfo.Uptime.String()).
-			SetTextColor(tcell.ColorWhite).
-			SetExpansion(1)
-
-		statusCell := tview.NewTableCell(containerInfo.State).
-			SetTextColor(tcell.ColorWhite).
-			SetExpansion(1)
-
-		cpuCell := tview.NewTableCell(fmt.Sprintf("%.2f%%", containerInfo.CPUUsage)).
-			SetTextColor(tcell.ColorWhite).
-			SetExpansion(1)
-
-		memoryCell := tview.NewTableCell(fmt.Sprintf("%.2f MB", containerInfo.MemoryUsage)).
-			SetTextColor(tcell.ColorWhite)
-
-		table.SetCell(i+1, 0, idCell)
-		table.SetCell(i+1, 1, nameCell)
-		table.SetCell(i+1, 2, imageCell)
-		table.SetCell(i+1, 3, uptimeCell)
-		table.SetCell(i+1, 4, statusCell)
-		table.SetCell(i+1, 5, cpuCell)
-		table.SetCell(i+1, 6, memoryCell)
-
-		table.SetSelectedFunc(func(row, column int) {
-			if row > 0 {
-				containerID := containerIDs[row-1]
-				DrawLogs(table, containerID)
-			}
-		})
+		table.SetCell(i+1, 0, tview.NewTableCell(containerInfo.ID).SetTextColor(tcell.ColorWhite))
+		table.SetCell(i+1, 1, tview.NewTableCell(containerInfo.Name).SetTextColor(tcell.ColorWhite))
+		table.SetCell(i+1, 2, tview.NewTableCell(containerInfo.Image).SetTextColor(tcell.ColorWhite))
+		table.SetCell(i+1, 3, tview.NewTableCell(containerInfo.Uptime.String()).SetTextColor(tcell.ColorWhite))
+		table.SetCell(i+1, 4, tview.NewTableCell(containerInfo.State).SetTextColor(tcell.ColorWhite))
+		table.SetCell(i+1, 5, tview.NewTableCell(fmt.Sprintf("%.2f%%", containerInfo.CPUUsage)).SetTextColor(tcell.ColorWhite))
+		table.SetCell(i+1, 6, tview.NewTableCell(fmt.Sprintf("%.2f MB", containerInfo.MemoryUsage)).SetTextColor(tcell.ColorWhite))
 	}
 
 	table.Select(1, 0)
+
+	table.SetSelectedFunc(func(row, column int) {
+		if row > 0 {
+			containerID := containerIDs[row-1]
+			DrawLogs(table, containerID)
+		}
+	})
 	table.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEscape {
 			app.Stop()
@@ -146,32 +120,36 @@ func CreateContainerList(app *tview.Application) *tview.Table {
 	})
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTAB {
-			modal := func(p tview.Primitive, width, height int) tview.Primitive {
-				return tview.NewFlex().
-					AddItem(nil, 0, 1, false).
-					AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-						AddItem(nil, 0, 1, false).
-						AddItem(p, height, 1, true).
-						AddItem(nil, 0, 1, false), width, 1, true).
-					AddItem(nil, 0, 1, false)
-			}
-
-			box := tview.NewBox().
-				SetBorder(true).
-				SetTitle(" Help (?) ")
-
-			pages := tview.NewPages().
-				AddPage("modal", modal(box, 0, 0), true, true)
-
-			if err := app.SetRoot(pages, true).Run(); err != nil {
-				panic(err)
-			}
+			showHelpModal(app)
 			return nil
 		}
 		return event
 	})
 
 	return table
+}
+
+func showHelpModal(app *tview.Application) {
+	modal := func(p tview.Primitive, width, height int) tview.Primitive {
+		return tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(p, height, 1, true).
+				AddItem(nil, 0, 1, false), width, 1, true).
+			AddItem(nil, 0, 1, false)
+	}
+
+	box := tview.NewBox().
+		SetBorder(true).
+		SetTitle(" Help (?) ")
+
+	pages := tview.NewPages().
+		AddPage("modal", modal(box, 0, 0), true, true)
+
+	if err := app.SetRoot(pages, true).Run(); err != nil {
+		panic(err)
+	}
 }
 
 func DrawLogs(table *tview.Table, containerID string) {
@@ -235,7 +213,7 @@ func searchLogs(textView *tview.TextView, keyword string) []string {
 		if strings.Contains(line, keyword) {
 			parts := strings.Split(line, keyword)
 			// Construct the line with the matched word highlighted
-			highlightedLine := fmt.Sprintf("%s[orange:black]%s[gray:black]%s\n", parts[0], keyword, parts[1])
+			highlightedLine := fmt.Sprintf("[gray:black]%s[orange:black]%s[gray:black]%s\n", parts[0], keyword, parts[1])
 			regionID := fmt.Sprintf("match%d", index)
 			highlightedText.WriteString(fmt.Sprintf(`["%s"]%s[""]`, regionID, highlightedLine))
 			matchingRegions = append(matchingRegions, regionID)
