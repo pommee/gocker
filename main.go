@@ -27,17 +27,16 @@ func CreateTextView(app *tview.Application, containerList *tview.Table, containe
 	return textView
 }
 
-func CreateHeader(app *tview.Application) *tview.TextView {
-	header := tview.NewTextView()
-	header.SetBackgroundColor(tcell.ColorCornflowerBlue)
-	header.SetText("Pocker 1.0.0")
+// func CreateHeader(app *tview.Application) *tview.TextView {
+// 	header := tview.NewTextView()
+// 	header.SetBackgroundColor(tcell.ColorCornflowerBlue)
+// 	header.SetText("Pocker 1.0.0")
 
-	return header
-}
+// 	return header
+// }
 
 func CreateHelper(app *tview.Application) *tview.TextView {
 	header := tview.NewTextView().SetDynamicColors(true).SetWordWrap(true)
-	header.SetBorderPadding(1, 1, 0, 0)
 
 	headerValues := map[string]string{
 		"ClientVersion": dockerClient.GetDockerVersion(),
@@ -75,7 +74,7 @@ func CreateFooter(app *tview.Application) *tview.TextView {
 func CreateContainerList(app *tview.Application) *tview.Table {
 	table := tview.NewTable().SetSelectable(true, false)
 	table.SetTitle("Containers")
-	table.SetBorderPadding(0, 1, 1, 1)
+	table.SetBorderPadding(0, 0, 1, 1)
 
 	headers := []string{"ID", "Container", "Image", "Uptime", "Status", "CPU", "Memory"}
 	for i, header := range headers {
@@ -155,6 +154,17 @@ func showHelpModal(app *tview.Application) {
 func DrawLogs(table *tview.Table, containerID string) {
 	textView := CreateTextView(app, table, containerID)
 	inputField := tview.NewInputField()
+	inputField.SetFieldTextColor(tcell.ColorWhite)
+	inputField.SetPlaceholderTextColor(tcell.ColorLightGray)
+	inputField.SetPlaceholder("Logs...")
+	footer := tview.NewTextView().SetDynamicColors(true)
+	footer.SetBackgroundColor(tcell.ColorCornflowerBlue)
+	footer.SetText("[white:#215ecf:b] ESC [white:blue:B] back [white:#215ecf:b] ENTER [white:blue:B] search [white:#215ecf:b] A [white:blue:B] attributes [white:#215ecf:b] I [white:blue:B] image")
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(inputField, 1, 0, true).
+		AddItem(textView, 0, 1, false).
+		AddItem(footer, 1, 1, false)
 
 	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter {
@@ -166,8 +176,6 @@ func DrawLogs(table *tview.Table, containerID string) {
 		}
 		return nil
 	})
-
-	inputField.SetPlaceholder("Logs...")
 
 	// Variable to keep track of current match index and matching regions
 	var currentMatchIndex int
@@ -181,14 +189,14 @@ func DrawLogs(table *tview.Table, containerID string) {
 				// If this is the first search or keyword changed, find new matches
 				if len(matchingRegions) == 0 || keyword != inputField.GetText() {
 					matchingRegions = searchLogs(textView, keyword)
-					currentMatchIndex = 0
+					currentMatchIndex = len(matchingRegions) - 1
 				}
 
-				// Highlight and scroll to the next match
+				// Highlight and scroll to the previous match
 				if len(matchingRegions) > 0 {
 					regionID := matchingRegions[currentMatchIndex]
 					textView.Highlight(regionID).ScrollToHighlight()
-					currentMatchIndex = (currentMatchIndex + 1) % len(matchingRegions)
+					currentMatchIndex = (currentMatchIndex - 1 + len(matchingRegions)) % len(matchingRegions)
 				}
 			}
 		case tcell.KeyEscape:
@@ -196,29 +204,22 @@ func DrawLogs(table *tview.Table, containerID string) {
 		}
 	})
 
-	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(inputField, 1, 0, true).
-		AddItem(textView, 0, 1, false)
-
 	app.SetRoot(flex, true).SetFocus(textView)
 }
 
 func searchLogs(textView *tview.TextView, keyword string) []string {
 	text := textView.GetText(true)
 	lines := strings.Split(text, "\n")
+
 	var matchingRegions []string
 	var highlightedText strings.Builder
 
 	for index, line := range lines {
 		if strings.Contains(line, keyword) {
-			parts := strings.Split(line, keyword)
-			// Construct the line with the matched word highlighted
-			highlightedLine := fmt.Sprintf("[gray:black]%s[orange:black]%s[gray:black]%s\n", parts[0], keyword, parts[1])
 			regionID := fmt.Sprintf("match%d", index)
-			highlightedText.WriteString(fmt.Sprintf(`["%s"]%s[""]`, regionID, highlightedLine))
+			highlightedText.WriteString(fmt.Sprintf(`["%s"]%s[""]`, regionID, highlightLine(line, keyword)))
 			matchingRegions = append(matchingRegions, regionID)
 		} else {
-			// Use gray color for non-matching lines
 			highlightedText.WriteString(fmt.Sprintf("[gray:black]%s\n", line))
 		}
 	}
@@ -227,18 +228,32 @@ func searchLogs(textView *tview.TextView, keyword string) []string {
 	return matchingRegions
 }
 
+func highlightLine(line, keyword string) string {
+	var highlightedLine strings.Builder
+	parts := strings.Split(line, keyword)
+
+	for i, part := range parts {
+		if i > 0 {
+			highlightedLine.WriteString(fmt.Sprintf("[orange:black]%s[white:black]", keyword))
+		}
+		highlightedLine.WriteString(fmt.Sprintf("[white:black]%s", part))
+	}
+	highlightedLine.WriteString("\n")
+	return highlightedLine.String()
+}
+
 func DrawHome() {
 	dockerClient.NewClient()
 	app.EnableMouse(true)
 
-	header := CreateHeader(app)
+	//header := CreateHeader(app)
 	helper := CreateHelper(app)
 	containerList := CreateContainerList(app)
 	footer := CreateFooter(app)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(header, 1, 1, false).
-		AddItem(helper, 5, 1, false).
+		//AddItem(header, 1, 1, false).
+		AddItem(helper, 4, 1, false).
 		AddItem(containerList, 0, 1, true).
 		AddItem(footer, 1, 1, true)
 
