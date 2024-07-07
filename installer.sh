@@ -51,6 +51,8 @@ main() {
     rm -f "${downloaded_file}"
     curl --fail --location --output "${downloaded_file}" "${asset_uri}"
 
+    mkdir -p "${executable_folder}"
+
     echo "[2/3] Installing ${file_name} to ${executable_folder}"
     tar -xzf "${downloaded_file}" -C "${executable_folder}"
     chmod +x "${executable_folder}/gocker"
