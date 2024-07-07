@@ -194,9 +194,14 @@ func DrawLogs(table *tview.Table, containerID string) {
 
 				// Highlight and scroll to the previous match
 				if len(matchingRegions) > 0 {
+					// Adjust currentMatchIndex for correct 1-based index display
+					displayIndex := len(matchingRegions) - currentMatchIndex
 					regionID := matchingRegions[currentMatchIndex]
 					textView.Highlight(regionID).ScrollToHighlight()
 					currentMatchIndex = (currentMatchIndex - 1 + len(matchingRegions)) % len(matchingRegions)
+
+					// Update title with correct 1-based index
+					textView.SetTitle(fmt.Sprintf(" Result %d/%d ", displayIndex, len(matchingRegions)))
 				}
 			}
 		case tcell.KeyEscape:
