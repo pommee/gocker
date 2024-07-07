@@ -1,5 +1,5 @@
 ## 📦 Installation
 
 ```shell
-curl https://raw.githubusercontent.com/pommee/gocker/main/install.sh | sh /dev/stdin
+curl https://raw.githubusercontent.com/pommee/gocker/main/installer.sh | sh /dev/stdin
 ```
