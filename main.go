@@ -6,14 +6,16 @@ import (
 	"main/docker"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 var (
-	dockerClient = docker.DockerWrapper{}
-	app          = tview.NewApplication()
+	dockerClient       = docker.DockerWrapper{}
+	app                = tview.NewApplication()
+	help_modal_visible = false
 )
 
 func CreateTextView(app *tview.Application, containerList *tview.Table, containerID string) *tview.TextView {
@@ -64,10 +66,9 @@ func CreateHelper(app *tview.Application) *tview.TextView {
 }
 
 func CreateFooter(app *tview.Application) *tview.TextView {
-	header := tview.NewTextView()
-	header.SetBackgroundColor(tcell.ColorDimGray)
-	header.SetText("[?] Help | [ESC] Quit | [J] Down | [K]Up")
-
+	header := tview.NewTextView().SetDynamicColors(true)
+	header.SetBackgroundColor(tcell.ColorBlue)
+	header.SetText("[white:#215ecf:b] ? [white:blue:B] help [white:#215ecf:b] ESC [white:#215ecf:b][white:blue:B] Quit [white:#215ecf:b] J [white:blue:B] Down [white:#215ecf:b] K [white:blue:B] Up")
 	return header
 }
 
@@ -90,18 +91,6 @@ func CreateContainerList(app *tview.Application) *tview.Table {
 	containerIDs := make([]string, len(containers))
 	for i, container := range containers {
 		containerIDs[i] = container.ID
-		containerInfo, err := dockerClient.GetContainerInfo(container.ID)
-		if err != nil {
-			log.Fatalf("Error getting container info: %v", err)
-		}
-
-		table.SetCell(i+1, 0, tview.NewTableCell(containerInfo.ID).SetTextColor(tcell.ColorWhite))
-		table.SetCell(i+1, 1, tview.NewTableCell(containerInfo.Name).SetTextColor(tcell.ColorWhite))
-		table.SetCell(i+1, 2, tview.NewTableCell(containerInfo.Image).SetTextColor(tcell.ColorWhite))
-		table.SetCell(i+1, 3, tview.NewTableCell(containerInfo.Uptime.String()).SetTextColor(tcell.ColorWhite))
-		table.SetCell(i+1, 4, tview.NewTableCell(containerInfo.State).SetTextColor(tcell.ColorWhite))
-		table.SetCell(i+1, 5, tview.NewTableCell(fmt.Sprintf("%.2f%%", containerInfo.CPUUsage)).SetTextColor(tcell.ColorWhite))
-		table.SetCell(i+1, 6, tview.NewTableCell(fmt.Sprintf("%.2f MB", containerInfo.MemoryUsage)).SetTextColor(tcell.ColorWhite))
 	}
 
 	table.Select(1, 0)
@@ -118,37 +107,143 @@ func CreateContainerList(app *tview.Application) *tview.Table {
 		}
 	})
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyTAB {
-			showHelpModal(app)
+		if event.Rune() == '?' {
+			showHelpModal(table)
 			return nil
 		}
 		return event
 	})
 
+	go updateContainerStats(app, table, containerIDs)
 	return table
 }
 
-func showHelpModal(app *tview.Application) {
-	modal := func(p tview.Primitive, width, height int) tview.Primitive {
-		return tview.NewFlex().
-			AddItem(nil, 0, 1, false).
-			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(nil, 0, 1, false).
-				AddItem(p, height, 1, true).
-				AddItem(nil, 0, 1, false), width, 1, true).
-			AddItem(nil, 0, 1, false)
+func updateContainerStats(app *tview.Application, table *tview.Table, containerIDs []string) {
+	for {
+		if help_modal_visible {
+			break
+		}
+
+		dockerContainers := dockerClient.GetContainers()
+
+		for i := 0; i < len(containerIDs); {
+			containerID := containerIDs[i]
+			found := false
+			for _, dockerContainer := range dockerContainers {
+				if dockerContainer.ID == containerID {
+					containerInfo, err := dockerClient.GetContainerInfo(containerID)
+					if err != nil {
+						log.Printf("Error getting container info for %s: %v", containerID, err)
+
+						containerIDs = append(containerIDs[:i], containerIDs[i+1:]...)
+
+						app.QueueUpdateDraw(func() {
+							table.RemoveRow(i + 1)
+						})
+						found = true
+						break
+					}
+
+					// Update the table with container information
+					app.QueueUpdateDraw(func() {
+						table.SetCell(i+1, 0, tview.NewTableCell(containerInfo.ID))
+						table.SetCell(i+1, 1, tview.NewTableCell(containerInfo.Name))
+						table.SetCell(i+1, 2, tview.NewTableCell(containerInfo.Image))
+						table.SetCell(i+1, 3, tview.NewTableCell(containerInfo.Uptime.String()))
+						table.SetCell(i+1, 4, tview.NewTableCell(containerInfo.State))
+						table.SetCell(i+1, 5, tview.NewTableCell(fmt.Sprintf("%.2f%%", containerInfo.CPUUsage)))
+						table.SetCell(i+1, 6, tview.NewTableCell(fmt.Sprintf("%.2f MB", containerInfo.MemoryUsage)))
+					})
+					found = true
+					break
+				}
+			}
+			if !found {
+				// Remove the containerID from containerIDs
+				containerIDs = append(containerIDs[:i], containerIDs[i+1:]...)
+				app.QueueUpdateDraw(func() {
+					table.RemoveRow(i + 1)
+				})
+				continue
+			}
+
+			i++
+		}
+
+		for _, dockerContainer := range dockerContainers {
+			found := false
+			for _, existingID := range containerIDs {
+				if dockerContainer.ID == existingID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				containerIDs = append(containerIDs, dockerContainer.ID)
+				addContainerToTable(app, table, dockerContainer)
+			}
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func addContainerToTable(app *tview.Application, table *tview.Table, dockerContainer docker.DockerContainer) {
+	containerInfo, err := dockerClient.GetContainerInfo(dockerContainer.ID)
+	if err != nil {
+		log.Printf("Error getting container info for %s: %v", dockerContainer.ID, err)
+		return
 	}
 
-	box := tview.NewBox().
-		SetBorder(true).
-		SetTitle(" Help (?) ")
+	app.QueueUpdateDraw(func() {
+		rowIndex := table.GetRowCount()
+		table.SetCell(rowIndex, 0, tview.NewTableCell(containerInfo.ID))
+		table.SetCell(rowIndex, 1, tview.NewTableCell(containerInfo.Name))
+		table.SetCell(rowIndex, 2, tview.NewTableCell(containerInfo.Image))
+		table.SetCell(rowIndex, 3, tview.NewTableCell(containerInfo.Uptime.String()))
+		table.SetCell(rowIndex, 4, tview.NewTableCell(containerInfo.State))
+		table.SetCell(rowIndex, 5, tview.NewTableCell(fmt.Sprintf("%.2f%%", containerInfo.CPUUsage)))
+		table.SetCell(rowIndex, 6, tview.NewTableCell(fmt.Sprintf("%.2f MB", containerInfo.MemoryUsage)))
+	})
+}
 
-	pages := tview.NewPages().
-		AddPage("modal", modal(box, 0, 0), true, true)
+func showHelpModal(table *tview.Table) {
+	table.SetSelectable(false, false)
+	help_modal_visible = true
+	table.Clear()
+	headers := []string{"Resource", "General", "Navigation"}
+	for i, header := range headers {
+		table.SetCell(0, i,
+			tview.NewTableCell(header).
+				SetTextColor(tcell.ColorCornflowerBlue).
+				SetExpansion(2).
+				SetSelectable(false))
 
-	if err := app.SetRoot(pages, true).Run(); err != nil {
-		panic(err)
 	}
+	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == '?' {
+			help_modal_visible = false
+			DrawHome()
+			return nil
+		}
+		return event
+	})
+
+	// Resource
+	table.SetCell(1, 0, createHelpCell("<s> (N/A)", "sort names"))
+	table.SetCell(2, 0, createHelpCell("<r> (N/A)", "toggle running containers"))
+
+	// General
+	table.SetCell(1, 1, createHelpCell("<?>", "help"))
+	table.SetCell(2, 1, createHelpCell("<q>", "quit"))
+
+	// Navigation
+	table.SetCell(1, 2, createHelpCell("<j/arrow-down>", "down"))
+	table.SetCell(2, 2, createHelpCell("<k/arrow-up>  ", "up"))
+}
+
+func createHelpCell(key string, helpText string) *tview.TableCell {
+	return tview.NewTableCell(fmt.Sprintf("[orange]%-20s[white]%s", key, helpText))
 }
 
 func DrawLogs(table *tview.Table, containerID string) {
@@ -158,11 +253,11 @@ func DrawLogs(table *tview.Table, containerID string) {
 	inputField.SetPlaceholderTextColor(tcell.ColorLightGray)
 	inputField.SetPlaceholder("Logs...")
 	footer := tview.NewTextView().SetDynamicColors(true)
-	footer.SetBackgroundColor(tcell.ColorCornflowerBlue)
+	footer.SetBackgroundColor(tcell.ColorBlue)
 	footer.SetText("[white:#215ecf:b] ESC [white:blue:B] back [white:#215ecf:b] ENTER [white:blue:B] search [white:#215ecf:b] A [white:blue:B] attributes [white:#215ecf:b] I [white:blue:B] image")
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(inputField, 1, 0, true).
+		AddItem(inputField, 1, 0, false).
 		AddItem(textView, 0, 1, false).
 		AddItem(footer, 1, 1, false)
 

@@ -57,11 +57,9 @@ main() {
     tar -xzf "${downloaded_file}" -C "${executable_folder}"
     chmod +x "${executable_folder}/gocker"
 
-    echo "[3/3] Setting environment variables"
-    echo "gocker was installed successfully to ${executable_folder}"
+    echo "[3/3] gocker was installed successfully to ${executable_folder}"
     echo "Manually add the directory to your \$HOME/.bash_profile (or similar):"
     echo "  export PATH=${executable_folder}:\$PATH"
-
     exit 0
 }
 

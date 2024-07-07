@@ -27,10 +27,9 @@ type DockerContainer struct {
 }
 
 type DockerImage struct {
-	ID          string
-	Repository  []string
-	Size        int64
-	VirtualSize int64
+	ID         string
+	Repository []string
+	Size       int64
 }
 
 type DockerWrapper struct {
@@ -50,10 +49,7 @@ func (dc *DockerWrapper) CloseClient() {
 }
 
 func (dc *DockerWrapper) GetContainers() []DockerContainer {
-	containers, err := dc.client.ContainerList(
-		context.Background(),
-		container.ListOptions{All: true},
-	)
+	containers, err := dc.client.ContainerList(context.Background(), container.ListOptions{All: true})
 	if err != nil {
 		panic(err)
 	}
@@ -61,7 +57,7 @@ func (dc *DockerWrapper) GetContainers() []DockerContainer {
 	for _, container := range containers {
 		dockerContainers = append(dockerContainers, DockerContainer{
 			ID:    container.ID,
-			Name:  container.Names[0][1:],
+			Name:  container.Names[0],
 			Image: container.Image,
 			State: container.State,
 		})
@@ -80,10 +76,9 @@ func (dc *DockerWrapper) GetImages() []DockerImage {
 	var dockerImages []DockerImage
 	for _, image := range images {
 		dockerImages = append(dockerImages, DockerImage{
-			ID:          image.ID,
-			Repository:  image.RepoTags,
-			Size:        image.Size,
-			VirtualSize: image.VirtualSize,
+			ID:         image.ID,
+			Repository: image.RepoTags,
+			Size:       image.Size,
 		})
 	}
 	return dockerImages
@@ -129,20 +124,25 @@ func (dc *DockerWrapper) GetContainerInfo(id string) (*ContainerInfo, error) {
 	cpuUsage := calculateCPUUsage(&statsJSON)
 	memoryUsage := calculateMemoryUsageMb(&statsJSON)
 
-	// Parse StartedAt timestamp
 	startedAt := container.State.StartedAt
 	startTime, err := time.Parse("2006-01-02T15:04:05.999999999Z", startedAt)
 	if err != nil {
 		return nil, err
 	}
 
+	running := container.State.Running
+	var uptime time.Duration
+	if running {
+		uptime = time.Since(startTime).Round(time.Second)
+	}
+
 	return &ContainerInfo{
-		ID:          container.ID[:12], // Short ID
+		ID:          container.ID[:12],
 		Name:        container.Name,
 		CPUUsage:    cpuUsage,
 		MemoryUsage: memoryUsage,
 		State:       container.State.Status,
-		Uptime:      time.Since(startTime).Round(time.Second),
+		Uptime:      uptime,
 		Image:       container.Config.Image,
 	}, nil
 }
