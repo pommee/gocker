@@ -4,7 +4,7 @@ set -e
 
 target=""
 githubUrl=""
-executable_folder="/usr/local/bin"
+executable_folder=$(eval echo "~/.local/bin")
 
 get_arch() {
     case $(uname -m) in
