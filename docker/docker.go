@@ -15,16 +15,8 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/rivo/tview"
 )
-
-type DockerContainer struct {
-	ID    string
-	Name  string
-	Image string
-	State string
-}
 
 type DockerImage struct {
 	ID         string
@@ -34,6 +26,16 @@ type DockerImage struct {
 
 type DockerWrapper struct {
 	client *client.Client
+}
+
+type ContainerInfo struct {
+	ID          string
+	Name        string
+	CPUUsage    float64
+	MemoryUsage float64
+	State       string
+	Uptime      time.Duration
+	Image       string
 }
 
 func (dc *DockerWrapper) NewClient() {
@@ -48,24 +50,15 @@ func (dc *DockerWrapper) CloseClient() {
 	dc.client.Close()
 }
 
-func (dc *DockerWrapper) GetContainers() []DockerContainer {
+func (dc *DockerWrapper) GetContainers() []types.Container {
 	containers, err := dc.client.ContainerList(context.Background(), container.ListOptions{All: true})
 	if err != nil {
 		panic(err)
 	}
-	var dockerContainers []DockerContainer
-	for _, container := range containers {
-		dockerContainers = append(dockerContainers, DockerContainer{
-			ID:    container.ID,
-			Name:  container.Names[0],
-			Image: container.Image,
-			State: container.State,
-		})
-	}
-	return dockerContainers
+	return containers
 }
 
-func (dc *DockerWrapper) GetImages() []DockerImage {
+func (dc *DockerWrapper) GetImages() []image.Summary {
 	images, err := dc.client.ImageList(
 		context.Background(),
 		image.ListOptions{},
@@ -73,15 +66,7 @@ func (dc *DockerWrapper) GetImages() []DockerImage {
 	if err != nil {
 		panic(err)
 	}
-	var dockerImages []DockerImage
-	for _, image := range images {
-		dockerImages = append(dockerImages, DockerImage{
-			ID:         image.ID,
-			Repository: image.RepoTags,
-			Size:       image.Size,
-		})
-	}
-	return dockerImages
+	return images
 }
 
 func (dc *DockerWrapper) GetDockerVersion() string {
@@ -92,16 +77,6 @@ func (dc *DockerWrapper) GetDockerVersion() string {
 func (dc *DockerWrapper) GetDockerVolumes() []*volume.Volume {
 	dockerVolumes, _ := dc.client.VolumeList(context.Background(), volume.ListOptions{})
 	return dockerVolumes.Volumes
-}
-
-type ContainerInfo struct {
-	ID          string
-	Name        string
-	CPUUsage    float64
-	MemoryUsage float64
-	State       string
-	Uptime      time.Duration
-	Image       string
 }
 
 func (dc *DockerWrapper) GetContainerInfo(id string) (*ContainerInfo, error) {
@@ -158,41 +133,6 @@ func calculateCPUUsage(stats *types.StatsJSON) float64 {
 
 func calculateMemoryUsageMb(stats *types.StatsJSON) float64 {
 	return float64(stats.MemoryStats.Usage) / float64(1024*1024)
-}
-
-func captureOutput(out io.Reader) (string, error) {
-	var combinedBuf bytes.Buffer
-	writer := io.MultiWriter(&combinedBuf)
-	errChan := make(chan error, 1)
-
-	go func() {
-		_, err := stdcopy.StdCopy(writer, writer, out)
-		errChan <- err
-	}()
-
-	if err := <-errChan; err != nil {
-		return "", err
-	}
-
-	return combinedBuf.String(), nil
-}
-
-func (dc *DockerWrapper) GetContainerLogs(id string) string {
-	logOptions := container.LogsOptions{ShowStdout: true, ShowStderr: true}
-
-	out, err := dc.client.ContainerLogs(context.Background(), id, logOptions)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching container logs: %v\n", err)
-		return ""
-	}
-
-	logs, err := captureOutput(out)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error capturing output: %v\n", err)
-		return ""
-	}
-
-	return logs
 }
 
 func (dc *DockerWrapper) ListenForNewLogs(id string, app *tview.Application, textView *tview.TextView) {
