@@ -50,8 +50,8 @@ func (dc *DockerWrapper) CloseClient() {
 	dc.client.Close()
 }
 
-func (dc *DockerWrapper) GetContainers() []types.Container {
-	containers, err := dc.client.ContainerList(context.Background(), container.ListOptions{All: true})
+func (dc *DockerWrapper) GetContainers(allContainers bool) []types.Container {
+	containers, err := dc.client.ContainerList(context.Background(), container.ListOptions{All: allContainers})
 	if err != nil {
 		panic(err)
 	}
@@ -99,17 +99,12 @@ func (dc *DockerWrapper) GetContainerInfo(id string) (*ContainerInfo, error) {
 	cpuUsage := calculateCPUUsage(&statsJSON)
 	memoryUsage := calculateMemoryUsageMb(&statsJSON)
 
-	startedAt := container.State.StartedAt
-	startTime, err := time.Parse("2006-01-02T15:04:05.999999999Z", startedAt)
+	startTime, err := time.Parse(time.RFC3339Nano, container.State.StartedAt)
 	if err != nil {
 		return nil, err
 	}
 
-	running := container.State.Running
-	var uptime time.Duration
-	if running {
-		uptime = time.Since(startTime).Round(time.Second)
-	}
+	uptime := time.Since(startTime).Round(time.Second)
 
 	return &ContainerInfo{
 		ID:          container.ID[:12],
