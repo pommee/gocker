@@ -286,30 +286,50 @@ func DrawLogs(table *tview.Table, containerID string) {
 	var currentMatchIndex int
 	var matchingRegions []string
 
+	inputField.SetChangedFunc(func(text string) {
+		keyword := inputField.GetText()
+
+		// If the keyword is not empty, search for matches
+		if keyword != "" {
+			// Always recalculate matchingRegions when the text changes
+			matchingRegions = searchLogs(textView, keyword)
+
+			// Initialize currentMatchIndex to the last match
+			currentMatchIndex = len(matchingRegions) - 1
+
+			// If we found matching regions, highlight the last one
+			if len(matchingRegions) > 0 {
+				displayIndex := currentMatchIndex + 1 // 1-based index for the display
+				regionID := matchingRegions[currentMatchIndex]
+				textView.Highlight(regionID).ScrollToHighlight()
+				textView.SetTitle(fmt.Sprintf(" Result %d/%d ", displayIndex, len(matchingRegions)))
+			} else {
+				textView.Highlight("") // Clear highlight if no matches
+				textView.SetTitle(" No matches found ")
+			}
+		} else {
+			// Clear the highlights and reset if the keyword is empty
+			textView.Highlight("")
+			textView.SetTitle(" Logs ")
+		}
+	})
+
 	inputField.SetDoneFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyEnter:
-			keyword := inputField.GetText()
-			if keyword != "" {
-				// If this is the first search or keyword changed, find new matches
-				if len(matchingRegions) == 0 || keyword != inputField.GetText() {
-					matchingRegions = searchLogs(textView, keyword)
-					currentMatchIndex = len(matchingRegions) - 1
-				}
+			// When Enter is pressed, switch to cycling mode
+			if len(matchingRegions) > 0 {
+				currentMatchIndex = (currentMatchIndex - 1 + len(matchingRegions)) % len(matchingRegions)
+				regionID := matchingRegions[currentMatchIndex]
+				textView.Highlight(regionID).ScrollToHighlight()
 
-				// Highlight and scroll to the previous match
-				if len(matchingRegions) > 0 {
-					// Adjust currentMatchIndex for correct 1-based index display
-					displayIndex := len(matchingRegions) - currentMatchIndex
-					regionID := matchingRegions[currentMatchIndex]
-					textView.Highlight(regionID).ScrollToHighlight()
-					currentMatchIndex = (currentMatchIndex - 1 + len(matchingRegions)) % len(matchingRegions)
-
-					// Update title with correct 1-based index
-					textView.SetTitle(fmt.Sprintf(" Result %d/%d ", displayIndex, len(matchingRegions)))
-				}
+				// Adjust display index and update title
+				displayIndex := len(matchingRegions) - currentMatchIndex
+				textView.SetTitle(fmt.Sprintf(" Result %d/%d ", displayIndex, len(matchingRegions)))
 			}
+
 		case tcell.KeyEscape:
+			// Reset state and redraw logs
 			DrawLogs(table, containerID)
 		}
 	})
