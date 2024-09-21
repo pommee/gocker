@@ -134,6 +134,7 @@ func (dc *DockerWrapper) ListenForNewLogs(id string, app *tview.Application, tex
 	logOptions := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
+		Follow:     false,
 	}
 
 	out, err := dc.client.ContainerLogs(context.Background(), id, logOptions)
@@ -143,7 +144,34 @@ func (dc *DockerWrapper) ListenForNewLogs(id string, app *tview.Application, tex
 	}
 	defer out.Close()
 
-	var buffer bytes.Buffer
+	var initialBuffer bytes.Buffer
+	if _, err := io.Copy(&initialBuffer, out); err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading initial logs: %v\n", err)
+		return
+	}
+
+	var highlightedBuffer bytes.Buffer
+	err = quick.Highlight(&highlightedBuffer, initialBuffer.String(), "Docker", "terminal16m", "monokai")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error highlighting initial log content: %v\n", err)
+		highlightedBuffer.Write(initialBuffer.Bytes())
+	}
+
+	app.QueueUpdateDraw(func() {
+		fmt.Fprint(tview.ANSIWriter(textView), highlightedBuffer.String())
+		textView.ScrollToEnd()
+	})
+
+	// now start live fetching logs
+	logOptions.Follow = true
+	logOptions.Since = time.Now().Format(time.RFC3339)
+	out, err = dc.client.ContainerLogs(context.Background(), id, logOptions)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error fetching container logs: %v\n", err)
+		return
+	}
+	defer out.Close()
+
 	header := make([]byte, 8)
 	for {
 		_, err := io.ReadFull(out, header)
@@ -169,18 +197,18 @@ func (dc *DockerWrapper) ListenForNewLogs(id string, app *tview.Application, tex
 			return
 		}
 
-		buffer.Write(logMessage)
-	}
+		var highlightedBuffer bytes.Buffer
+		err = quick.Highlight(&highlightedBuffer, string(logMessage), "Docker", "terminal16m", "monokai")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error highlighting log content: %v\n", err)
+			highlightedBuffer.Write(logMessage)
+		}
 
-	var highlightedBuffer bytes.Buffer
-	err = quick.Highlight(&highlightedBuffer, buffer.String(), "Docker", "terminal16m", "monokai")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error highlighting log content: %v\n", err)
-		highlightedBuffer.Write(buffer.Bytes())
+		app.QueueUpdateDraw(func() {
+			fmt.Fprint(tview.ANSIWriter(textView), highlightedBuffer.String())
+			textView.ScrollToEnd() // Scroll to the bottom after appending new logs
+		})
 	}
-
-	fmt.Fprint(tview.ANSIWriter(textView), highlightedBuffer.String())
-	textView.ScrollToEnd()
 }
 
 func (dc *DockerWrapper) PauseContainer(id string) {
