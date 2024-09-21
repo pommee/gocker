@@ -90,7 +90,6 @@ func CreateContainerList(app *tview.Application) *tview.Table {
 	initialContainers := dockerClient.GetContainers(false)
 	updateTableWithContainers(app, table, initialContainers)
 
-	// Select the first row
 	table.Select(1, 0)
 
 	ticker := time.NewTicker(2 * time.Second)
@@ -282,33 +281,26 @@ func DrawLogs(table *tview.Table, containerID string) {
 		return nil
 	})
 
-	// Variable to keep track of current match index and matching regions
 	var currentMatchIndex int
 	var matchingRegions []string
 
 	inputField.SetChangedFunc(func(text string) {
 		keyword := inputField.GetText()
 
-		// If the keyword is not empty, search for matches
 		if keyword != "" {
-			// Always recalculate matchingRegions when the text changes
 			matchingRegions = searchLogs(textView, keyword)
-
-			// Initialize currentMatchIndex to the last match
 			currentMatchIndex = len(matchingRegions) - 1
 
-			// If we found matching regions, highlight the last one
 			if len(matchingRegions) > 0 {
-				displayIndex := currentMatchIndex + 1 // 1-based index for the display
+				displayIndex := currentMatchIndex + 1
 				regionID := matchingRegions[currentMatchIndex]
 				textView.Highlight(regionID).ScrollToHighlight()
 				textView.SetTitle(fmt.Sprintf(" Result %d/%d ", displayIndex, len(matchingRegions)))
 			} else {
-				textView.Highlight("") // Clear highlight if no matches
+				textView.Highlight("")
 				textView.SetTitle(" No matches found ")
 			}
 		} else {
-			// Clear the highlights and reset if the keyword is empty
 			textView.Highlight("")
 			textView.SetTitle(" Logs ")
 		}
@@ -317,19 +309,16 @@ func DrawLogs(table *tview.Table, containerID string) {
 	inputField.SetDoneFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyEnter:
-			// When Enter is pressed, switch to cycling mode
 			if len(matchingRegions) > 0 {
 				currentMatchIndex = (currentMatchIndex - 1 + len(matchingRegions)) % len(matchingRegions)
 				regionID := matchingRegions[currentMatchIndex]
 				textView.Highlight(regionID).ScrollToHighlight()
 
-				// Adjust display index and update title
 				displayIndex := len(matchingRegions) - currentMatchIndex
 				textView.SetTitle(fmt.Sprintf(" Result %d/%d ", displayIndex, len(matchingRegions)))
 			}
 
 		case tcell.KeyEscape:
-			// Reset state and redraw logs
 			DrawLogs(table, containerID)
 		}
 	})
