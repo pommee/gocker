@@ -23,7 +23,6 @@ func CreateTextView(app *tview.Application, containerList *tview.Table, containe
 	textView := tview.NewTextView().SetDynamicColors(true).SetRegions(true).SetChangedFunc(func() {
 		app.Draw()
 	})
-	textView.SetBorder(true)
 
 	go dockerClient.ListenForNewLogs(containerID, app, textView)
 

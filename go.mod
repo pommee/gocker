@@ -4,7 +4,7 @@ go 1.22.0
 
 require (
 	github.com/alecthomas/chroma v0.10.0
-	github.com/docker/docker v27.2.1+incompatible
+	github.com/docker/docker v27.3.1+incompatible
 	github.com/gdamore/tcell/v2 v2.7.4
 	github.com/rivo/tview v0.0.0-20240818110301-fd649dbf1223
 )

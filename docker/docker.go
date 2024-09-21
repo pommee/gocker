@@ -144,17 +144,35 @@ func (dc *DockerWrapper) ListenForNewLogs(id string, app *tview.Application, tex
 	}
 	defer out.Close()
 
-	var initialBuffer bytes.Buffer
-	if _, err := io.Copy(&initialBuffer, out); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading initial logs: %v\n", err)
-		return
+	var initialLogBuffer bytes.Buffer
+	header := make([]byte, 8)
+
+	for {
+		_, err := io.ReadFull(out, header)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			fmt.Fprintf(os.Stderr, "Error reading log header: %v\n", err)
+			return
+		}
+
+		logLength := int64(header[4])<<24 | int64(header[5])<<16 | int64(header[6])<<8 | int64(header[7])
+		logMessage := make([]byte, logLength)
+		_, err = io.ReadFull(out, logMessage)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading log message: %v\n", err)
+			return
+		}
+
+		initialLogBuffer.Write(logMessage)
 	}
 
 	var highlightedBuffer bytes.Buffer
-	err = quick.Highlight(&highlightedBuffer, initialBuffer.String(), "Docker", "terminal16m", "monokai")
+	err = quick.Highlight(&highlightedBuffer, initialLogBuffer.String(), "Docker", "terminal16m", "monokai")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error highlighting initial log content: %v\n", err)
-		highlightedBuffer.Write(initialBuffer.Bytes())
+		highlightedBuffer.Write(initialLogBuffer.Bytes())
 	}
 
 	app.QueueUpdateDraw(func() {
@@ -172,7 +190,7 @@ func (dc *DockerWrapper) ListenForNewLogs(id string, app *tview.Application, tex
 	}
 	defer out.Close()
 
-	header := make([]byte, 8)
+	header = make([]byte, 8)
 	for {
 		_, err := io.ReadFull(out, header)
 		if err != nil {
@@ -206,7 +224,7 @@ func (dc *DockerWrapper) ListenForNewLogs(id string, app *tview.Application, tex
 
 		app.QueueUpdateDraw(func() {
 			fmt.Fprint(tview.ANSIWriter(textView), highlightedBuffer.String())
-			textView.ScrollToEnd() // Scroll to the bottom after appending new logs
+			textView.ScrollToEnd()
 		})
 	}
 }
