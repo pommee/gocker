@@ -19,7 +19,7 @@ var (
 	help_modal_visible = false
 )
 
-func CreateTextView(app *tview.Application, containerList *tview.Table, containerID string) *tview.TextView {
+func createTextView(app *tview.Application, containerID string) *tview.TextView {
 	textView := tview.NewTextView().SetDynamicColors(true).SetRegions(true).SetChangedFunc(func() {
 		app.Draw()
 	})
@@ -37,7 +37,7 @@ func CreateTextView(app *tview.Application, containerList *tview.Table, containe
 // 	return header
 // }
 
-func CreateHelper(app *tview.Application) *tview.TextView {
+func createHelper() *tview.TextView {
 	header := tview.NewTextView().SetDynamicColors(true).SetWordWrap(true)
 
 	headerValues := map[string]string{
@@ -65,14 +65,14 @@ func CreateHelper(app *tview.Application) *tview.TextView {
 	return header
 }
 
-func CreateFooter(app *tview.Application) *tview.TextView {
+func createFooter() *tview.TextView {
 	header := tview.NewTextView().SetDynamicColors(true)
 	header.SetBackgroundColor(tcell.ColorBlue)
 	header.SetText("[white:#215ecf:b] ? [white:blue:B] help [white:#215ecf:b] ESC [white:#215ecf:b][white:blue:B] Quit [white:#215ecf:b] 1 [white:blue:B] running [white:#215ecf:b] 2 [white:blue:B] all")
 	return header
 }
 
-func CreateContainerList(app *tview.Application) *tview.Table {
+func createContainerList(app *tview.Application) *tview.Table {
 	table := tview.NewTable().SetSelectable(true, false)
 	table.SetTitle("Containers")
 	table.SetBorderPadding(0, 0, 1, 1)
@@ -99,7 +99,7 @@ func CreateContainerList(app *tview.Application) *tview.Table {
 	table.SetSelectedFunc(func(row, column int) {
 		if row > 0 && row-1 < len(containerIDs) {
 			containerID := containerIDs[row-1]
-			DrawLogs(table, containerID)
+			drawLogs(table, containerID)
 		}
 	})
 
@@ -230,7 +230,7 @@ func showHelpModal(table *tview.Table) {
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == '?' {
 			help_modal_visible = false
-			DrawHome()
+			drawHome()
 			return nil
 		}
 		return event
@@ -254,31 +254,11 @@ func createHelpCell(key string, helpText string) *tview.TableCell {
 	return tview.NewTableCell(fmt.Sprintf("[orange]%-20s[white]%s", key, helpText))
 }
 
-func DrawLogs(table *tview.Table, containerID string) {
-	textView := CreateTextView(app, table, containerID)
+func createLogsInputField(table *tview.Table, textView *tview.TextView, containerID string) *tview.InputField {
 	inputField := tview.NewInputField()
 	inputField.SetFieldTextColor(tcell.ColorWhite)
 	inputField.SetPlaceholderTextColor(tcell.ColorLightGray)
 	inputField.SetPlaceholder("Logs...")
-	footer := tview.NewTextView().SetDynamicColors(true)
-	footer.SetBackgroundColor(tcell.ColorBlue)
-	footer.SetText("[white:#215ecf:b] ESC [white:blue:B] back [white:#215ecf:b] ENTER [white:blue:B] search [white:#215ecf:b] A [white:blue:B] attributes [white:#215ecf:b] I [white:blue:B] image")
-
-	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(inputField, 1, 0, false).
-		AddItem(textView, 0, 1, false).
-		AddItem(footer, 1, 1, false)
-
-	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter {
-			app.SetFocus(inputField)
-		}
-		if event.Key() == tcell.KeyEscape {
-			DrawHome()
-			return nil
-		}
-		return nil
-	})
 
 	var currentMatchIndex int
 	var matchingRegions []string
@@ -318,11 +298,11 @@ func DrawLogs(table *tview.Table, containerID string) {
 			}
 
 		case tcell.KeyEscape:
-			DrawLogs(table, containerID)
+			drawLogs(table, containerID)
 		}
 	})
 
-	app.SetRoot(flex, true).SetFocus(textView)
+	return inputField
 }
 
 func searchLogs(textView *tview.TextView, keyword string) []string {
@@ -360,14 +340,44 @@ func highlightLine(line, keyword string) string {
 	return highlightedLine.String()
 }
 
-func DrawHome() {
+func drawLogs(table *tview.Table, containerID string) {
+	textView := createTextView(app, containerID)
+	inputField := createLogsInputField(table, textView, containerID)
+
+	footer := tview.NewTextView().SetDynamicColors(true)
+	footer.SetBackgroundColor(tcell.GetColor("#292929"))
+	footer.SetText("[orange:#292929:b] ESC[lightgray:#292929:B] back [orange:#292929:b] ENTER[lightgray:#292929:B] search [orange:#292929:b] A[lightgray:#292929:B] attributes [orange:#292929:b] I[lightgray:#292929:B] image")
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(textView, 0, 1, false).
+		AddItem(footer, 1, 1, false)
+
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			flex.Clear()
+			flex.AddItem(inputField, 1, 0, false).
+				AddItem(textView, 0, 1, false).
+				AddItem(footer, 1, 1, false)
+			app.SetFocus(inputField)
+		}
+		if event.Key() == tcell.KeyEscape {
+			drawHome()
+			return nil
+		}
+		return nil
+	})
+
+	app.SetRoot(flex, true).SetFocus(textView)
+}
+
+func drawHome() {
 	dockerClient.NewClient()
 	app.EnableMouse(true)
 
 	//header := CreateHeader(app)
-	helper := CreateHelper(app)
-	containerList := CreateContainerList(app)
-	footer := CreateFooter(app)
+	helper := createHelper()
+	containerList := createContainerList(app)
+	footer := createFooter()
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		//AddItem(header, 1, 1, false).
@@ -381,5 +391,5 @@ func DrawHome() {
 }
 
 func main() {
-	DrawHome()
+	drawHome()
 }
