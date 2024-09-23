@@ -5,9 +5,10 @@ go 1.22.0
 require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/docker/docker v27.3.1+incompatible
-	github.com/gdamore/tcell/v2 v2.7.4
 	github.com/rivo/tview v0.0.0-20240818110301-fd649dbf1223
 )
+
+require github.com/gdamore/tcell/v2 v2.7.4 // indirect
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -18,6 +19,7 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
+	github.com/gdamore/tcell v1.4.0
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
