@@ -41,5 +41,6 @@ require (
 	golang.org/x/term v0.24.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools/v3 v3.5.1 // indirect
 )

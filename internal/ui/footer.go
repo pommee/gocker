@@ -6,8 +6,28 @@ import (
 )
 
 func CreateFooter() *tview.TextView {
+
 	header := tview.NewTextView().SetDynamicColors(true)
-	header.SetBackgroundColor(tcell.GetColor("#24292f"))
-	header.SetText("[orange:#24292f:b] ? [#989a9c:#24292f:B] help [orange:#24292f:b] ESC [orange:#24292f:b][#989a9c:#24292f:B] Quit [orange:#24292f:b] 1 [#989a9c:#24292f:B] running [orange:#24292f:b] 2 [#989a9c:#24292f:B] all")
+	header.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
+	header.SetText(
+		createSection("?", "help") +
+			createSection("ESC", "quit") +
+			createSection("1", "running") +
+			createSection("2", "all"),
+	)
 	return header
+}
+
+func createSection(hint string, text string) string {
+	section := ("[" +
+		theme.Footer.Hint +
+		":" +
+		theme.Footer.Background +
+		":b] " +
+		hint +
+		" [" +
+		theme.Footer.Text +
+		":#24292f:B] " +
+		text + " ")
+	return section
 }

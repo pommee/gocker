@@ -1,0 +1,11 @@
+
+
+footer:
+  hint: orange
+  text: "#989a9c"
+  background: "#24292f"
+
+table:
+  fg: black
+  selected: "#313131"
+  headers: cornflowerblue

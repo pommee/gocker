@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"main/internal/config"
 	"main/internal/docker"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -16,7 +18,9 @@ import (
 var (
 	app          *tview.Application
 	dockerClient = docker.DockerWrapper{}
-	containerMap map[string]int
+	containerMap = make(map[string]int)
+	mapMutex     sync.Mutex // Mutex for synchronizing access to containerMap
+	theme        = config.LoadTheme()
 )
 
 func Start() {
@@ -85,12 +89,13 @@ func setupContainerTable() *tview.Table {
 	table := tview.NewTable().SetSelectable(true, false)
 	table.SetTitle("Containers")
 	table.SetBorderPadding(0, 0, 1, 1)
-	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.GetColor("#313131")))
+	table.SetBackgroundColor(tcell.GetColor(theme.Table.Fg))
+	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.GetColor(theme.Table.Selected)))
 
 	headers := []string{"ID", "Container", "Image", "Uptime", "Status", "CPU", "Memory"}
 	for i, header := range headers {
 		table.SetCell(0, i, tview.NewTableCell(header).
-			SetTextColor(tcell.ColorCornflowerBlue).
+			SetTextColor(tcell.GetColor(theme.Table.Headers)).
 			SetExpansion(1).
 			SetSelectable(false))
 	}
@@ -110,7 +115,7 @@ func startDockerEventListener(ctx context.Context, eventChan chan events.Message
 
 func handleContainerSelection(row int, containers []types.Container, cancel context.CancelFunc, table *tview.Table) {
 	containerID := containers[row-1].ID
-	cancel()
+	cancel() // Cancel the fetching goroutine
 	DrawLogs(table, containerID)
 }
 
@@ -141,6 +146,8 @@ func handleDockerEvent(event events.Message, table *tview.Table) {
 
 	if event.Action == "destroy" {
 		app.QueueUpdateDraw(func() {
+			mapMutex.Lock() // Lock the map for safe access
+			defer mapMutex.Unlock()
 			if row, exists := containerMap[event.ID]; exists {
 				table.RemoveRow(row)
 				delete(containerMap, event.ID)
@@ -163,7 +170,6 @@ func showHelpModal(table *tview.Table) {
 				SetTextColor(tcell.ColorCornflowerBlue).
 				SetExpansion(2).
 				SetSelectable(false))
-
 	}
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == '?' {
@@ -189,6 +195,9 @@ func showHelpModal(table *tview.Table) {
 
 func updateTableWithContainers(table *tview.Table, containers []types.Container) {
 	// Clear previous mappings
+	mapMutex.Lock()
+	defer mapMutex.Unlock() // Ensure we unlock after updating
+
 	containerMap = make(map[string]int)
 
 	for rowIndex, container := range containers {
@@ -197,13 +206,17 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 			if err != nil {
 				log.Printf("Error getting container info for %s: %v", container.ID, err)
 				app.QueueUpdateDraw(func() {
+					mapMutex.Lock() // Lock the map during access
+					defer mapMutex.Unlock()
 					table.RemoveRow(row)
 					delete(containerMap, container.ID)
 				})
 				return
 			}
 
+			mapMutex.Lock()
 			containerMap[container.ID] = row
+			mapMutex.Unlock()
 
 			app.QueueUpdateDraw(func() {
 				updateContainerRow(table, row, containerInfo)
