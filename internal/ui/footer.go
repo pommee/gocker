@@ -7,7 +7,7 @@ import (
 
 func CreateFooter() *tview.TextView {
 	header := tview.NewTextView().SetDynamicColors(true)
-	header.SetBackgroundColor(tcell.ColorBlue)
-	header.SetText("[white:#215ecf:b] ? [white:blue:B] help [white:#215ecf:b] ESC [white:#215ecf:b][white:blue:B] Quit [white:#215ecf:b] 1 [white:blue:B] running [white:#215ecf:b] 2 [white:blue:B] all")
+	header.SetBackgroundColor(tcell.GetColor("#24292f"))
+	header.SetText("[orange:#24292f:b] ? [#989a9c:#24292f:B] help [orange:#24292f:b] ESC [orange:#24292f:b][#989a9c:#24292f:B] Quit [orange:#24292f:b] 1 [#989a9c:#24292f:B] running [orange:#24292f:b] 2 [#989a9c:#24292f:B] all")
 	return header
 }

@@ -85,6 +85,7 @@ func setupContainerTable() *tview.Table {
 	table := tview.NewTable().SetSelectable(true, false)
 	table.SetTitle("Containers")
 	table.SetBorderPadding(0, 0, 1, 1)
+	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.GetColor("#313131")))
 
 	headers := []string{"ID", "Container", "Image", "Uptime", "Status", "CPU", "Memory"}
 	for i, header := range headers {
