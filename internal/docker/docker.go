@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"time"
 
 	"github.com/alecthomas/chroma/quick"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/events"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
@@ -80,6 +83,31 @@ func (dc *DockerWrapper) GetDockerVersion() string {
 func (dc *DockerWrapper) GetDockerVolumes() []*volume.Volume {
 	dockerVolumes, _ := dc.client.VolumeList(context.Background(), volume.ListOptions{})
 	return dockerVolumes.Volumes
+}
+
+func (dc *DockerWrapper) ListenForEvents(ctx context.Context, eventChan chan<- events.Message) {
+	eventFilter := filters.NewArgs()
+	eventFilter.Add("type", "container")
+
+	messages, errs := dc.client.Events(ctx, events.ListOptions{
+		Filters: eventFilter,
+	})
+
+	for {
+		select {
+		case event := <-messages:
+			eventChan <- event
+		case err := <-errs:
+			if err != nil {
+				log.Printf("Error while listening to Docker events: %v", err)
+				close(eventChan)
+				return
+			}
+		case <-ctx.Done():
+			close(eventChan)
+			return
+		}
+	}
 }
 
 func (dc *DockerWrapper) GetContainerInfo(id string) (*ContainerInfo, error) {

@@ -1,20 +1,20 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"main/internal/docker"
-	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/events"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 var (
-	app                *tview.Application
-	dockerClient       = docker.DockerWrapper{}
-	help_modal_visible = false
+	app          *tview.Application
+	dockerClient = docker.DockerWrapper{}
 )
 
 func Start() {
@@ -41,6 +41,28 @@ func DrawHome() {
 }
 
 func createContainerList() *tview.Table {
+	table := setupContainerTable()
+	initialContainers := dockerClient.GetContainers(true)
+	updateTableWithContainers(table, initialContainers)
+
+	table.Select(1, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	eventChan := make(chan events.Message)
+	startDockerEventListener(ctx, eventChan, table)
+
+	table.SetSelectedFunc(func(row, column int) {
+		handleContainerSelection(row, initialContainers, cancel, table)
+	})
+	table.SetDoneFunc(handleDone)
+	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		return handleInput(event, table)
+	})
+
+	return table
+}
+
+func setupContainerTable() *tview.Table {
 	table := tview.NewTable().SetSelectable(true, false)
 	table.SetTitle("Containers")
 	table.SetBorderPadding(0, 0, 1, 1)
@@ -53,48 +75,49 @@ func createContainerList() *tview.Table {
 			SetSelectable(false))
 	}
 
-	// Initialize with initial containers (running only)
-	initialContainers := dockerClient.GetContainers(false)
-	updateTableWithContainers(table, initialContainers)
-
-	table.Select(1, 0)
-
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	var containerIDs []string
-
-	table.SetSelectedFunc(func(row, column int) {
-		if row > 0 && row-1 < len(containerIDs) {
-			containerID := containerIDs[row-1]
-			DrawLogs(table, containerID)
-		}
-	})
-
-	table.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEscape {
-			app.Stop()
-		}
-	})
-
-	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Rune() == '?' {
-			showHelpModal(table)
-			return nil
-		}
-
-		if event.Rune() == '1' || event.Rune() == '2' {
-			ticker.Stop()
-			allContainers := event.Rune() == '2'
-			ticker = time.NewTicker(2 * time.Second)
-			go updateContainerStats(table, allContainers, ticker, &containerIDs)
-		}
-
-		return event
-	})
-
-	go updateContainerStats(table, false, ticker, &containerIDs)
 	return table
+}
+
+func startDockerEventListener(ctx context.Context, eventChan chan events.Message, table *tview.Table) {
+	go dockerClient.ListenForEvents(ctx, eventChan)
+
+	go func() {
+		for event := range eventChan {
+			handleDockerEvent(event, table)
+		}
+	}()
+}
+
+func handleContainerSelection(row int, containers []types.Container, cancel context.CancelFunc, table *tview.Table) {
+	containerID := containers[row-1].ID
+	cancel()
+	DrawLogs(table, containerID)
+}
+
+func handleDone(key tcell.Key) {
+	if key == tcell.KeyEscape {
+		app.Stop()
+	}
+}
+
+func handleInput(event *tcell.EventKey, table *tview.Table) *tcell.EventKey {
+	if event.Rune() == '?' {
+		showHelpModal(table)
+		return nil
+	}
+	return event
+}
+
+func handleDockerEvent(event events.Message, table *tview.Table) {
+	log.Printf("[event] Action: %s, ID: %s, Status: %s", event.Action, event.ID, event.Status)
+
+	// Refresh the table when containers start or stop
+	if event.Action == "start" || event.Action == "stop" {
+		app.QueueUpdateDraw(func() {
+			containers := dockerClient.GetContainers(true)
+			updateTableWithContainers(table, containers)
+		})
+	}
 }
 
 func createHelpCell(key string, helpText string) *tview.TableCell {
@@ -103,7 +126,6 @@ func createHelpCell(key string, helpText string) *tview.TableCell {
 
 func showHelpModal(table *tview.Table) {
 	table.SetSelectable(false, false)
-	help_modal_visible = true
 	table.Clear()
 	headers := []string{"Resource", "General", "Navigation"}
 	for i, header := range headers {
@@ -116,7 +138,6 @@ func showHelpModal(table *tview.Table) {
 	}
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == '?' {
-			help_modal_visible = false
 			DrawHome()
 			return nil
 		}
@@ -135,50 +156,6 @@ func showHelpModal(table *tview.Table) {
 	// Navigation
 	table.SetCell(1, 2, createHelpCell("<j/arrow-down>", "down"))
 	table.SetCell(2, 2, createHelpCell("<k/arrow-up>  ", "up"))
-}
-
-func removeStaleContainers(table *tview.Table, containerMap map[string]int) {
-	existingRows := table.GetRowCount()
-	for row := 1; row < existingRows; row++ {
-		idCell := table.GetCell(row, 0)
-		if idCell == nil {
-			continue
-		}
-		containerID := idCell.Text
-		if _, exists := containerMap[containerID]; !exists {
-			app.QueueUpdateDraw(func() {
-				table.RemoveRow(row)
-			})
-		}
-	}
-}
-
-func updateContainerStats(table *tview.Table, allContainers bool, ticker *time.Ticker, containerIDs *[]string) {
-	containers := dockerClient.GetContainers(allContainers)
-	containerMap := createContainerMap(containers)
-
-	updateTableWithContainers(table, containers)
-	*containerIDs = make([]string, len(containers))
-	for i, container := range containers {
-		(*containerIDs)[i] = container.ID
-	}
-
-	removeStaleContainers(table, containerMap)
-
-	for range ticker.C {
-		if help_modal_visible {
-			return
-		}
-
-		updatedContainers := dockerClient.GetContainers(allContainers)
-		updateTableWithContainers(table, updatedContainers)
-		*containerIDs = make([]string, len(updatedContainers))
-		for i, container := range updatedContainers {
-			(*containerIDs)[i] = container.ID
-		}
-
-		removeStaleContainers(table, createContainerMap(updatedContainers))
-	}
 }
 
 func updateTableWithContainers(table *tview.Table, containers []types.Container) {
