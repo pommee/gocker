@@ -11,10 +11,7 @@ import (
 func DrawLogs(table *tview.Table, containerID string) {
 	textView := createTextView(containerID)
 	inputField := createLogsInputField(table, textView, containerID)
-
-	footer := tview.NewTextView().SetDynamicColors(true)
-	footer.SetBackgroundColor(tcell.GetColor("#292929"))
-	footer.SetText("[orange:#292929:b] ESC[lightgray:#292929:B] back [orange:#292929:b] ENTER[lightgray:#292929:B] search [orange:#292929:b] A[lightgray:#292929:B] attributes [orange:#292929:b] I[lightgray:#292929:B] image")
+	footer := CreateFooterLogs()
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(textView, 0, 1, false).

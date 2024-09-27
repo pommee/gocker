@@ -5,17 +5,29 @@ import (
 	"github.com/rivo/tview"
 )
 
-func CreateFooter() *tview.TextView {
+func CreateFooterHome() *tview.TextView {
 
-	header := tview.NewTextView().SetDynamicColors(true)
-	header.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
-	header.SetText(
+	footer := tview.NewTextView().SetDynamicColors(true)
+	footer.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
+	footer.SetText(
 		createSection("?", "help") +
 			createSection("ESC", "quit") +
 			createSection("1", "running") +
 			createSection("2", "all"),
 	)
-	return header
+	return footer
+}
+
+func CreateFooterLogs() *tview.TextView {
+	footer := tview.NewTextView().SetDynamicColors(true)
+	footer.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
+	footer.SetText(
+		createSection("ESC", "back") +
+			createSection("ENTER", "search") +
+			createSection("A", "attributes") +
+			createSection("I", "image"),
+	)
+	return footer
 }
 
 func createSection(hint string, text string) string {
@@ -27,7 +39,7 @@ func createSection(hint string, text string) string {
 		hint +
 		" [" +
 		theme.Footer.Text +
-		":#24292f:B] " +
+		":#24292f:B]" +
 		text + " ")
 	return section
 }

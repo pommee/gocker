@@ -34,7 +34,7 @@ func DrawHome() {
 
 	helper := CreateHelper()
 	containerList := createContainerList()
-	footer := CreateFooter()
+	footer := CreateFooterHome()
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(helper, 4, 1, false).
