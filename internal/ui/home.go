@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"main/internal/docker"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/events"
@@ -15,6 +16,7 @@ import (
 var (
 	app          *tview.Application
 	dockerClient = docker.DockerWrapper{}
+	containerMap map[string]int
 )
 
 func Start() {
@@ -50,6 +52,7 @@ func createContainerList() *tview.Table {
 	ctx, cancel := context.WithCancel(context.Background())
 	eventChan := make(chan events.Message)
 	startDockerEventListener(ctx, eventChan, table)
+	go startContainerStatsFetching(ctx, table)
 
 	table.SetSelectedFunc(func(row, column int) {
 		handleContainerSelection(row, initialContainers, cancel, table)
@@ -60,6 +63,22 @@ func createContainerList() *tview.Table {
 	})
 
 	return table
+}
+
+func startContainerStatsFetching(ctx context.Context, table *tview.Table) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Stopped container stats fetching.")
+			return
+		case <-ticker.C:
+			containers := dockerClient.GetContainers(true)
+			updateTableWithContainers(table, containers)
+		}
+	}
 }
 
 func setupContainerTable() *tview.Table {
@@ -118,6 +137,15 @@ func handleDockerEvent(event events.Message, table *tview.Table) {
 			updateTableWithContainers(table, containers)
 		})
 	}
+
+	if event.Action == "destroy" {
+		app.QueueUpdateDraw(func() {
+			if row, exists := containerMap[event.ID]; exists {
+				table.RemoveRow(row)
+				delete(containerMap, event.ID)
+			}
+		})
+	}
 }
 
 func createHelpCell(key string, helpText string) *tview.TableCell {
@@ -159,34 +187,28 @@ func showHelpModal(table *tview.Table) {
 }
 
 func updateTableWithContainers(table *tview.Table, containers []types.Container) {
-	containerMap := createContainerMap(containers)
+	// Clear previous mappings
+	containerMap = make(map[string]int)
 
-	for _, container := range containers {
-		go func(container types.Container) {
+	for rowIndex, container := range containers {
+		go func(container types.Container, row int) {
 			containerInfo, err := dockerClient.GetContainerInfo(container.ID)
 			if err != nil {
 				log.Printf("Error getting container info for %s: %v", container.ID, err)
 				app.QueueUpdateDraw(func() {
-					table.RemoveRow(containerMap[container.ID])
+					table.RemoveRow(row)
 					delete(containerMap, container.ID)
 				})
 				return
 			}
 
-			row := containerMap[container.ID]
+			containerMap[container.ID] = row
+
 			app.QueueUpdateDraw(func() {
 				updateContainerRow(table, row, containerInfo)
 			})
-		}(container)
+		}(container, rowIndex+1)
 	}
-}
-
-func createContainerMap(containers []types.Container) map[string]int {
-	containerMap := make(map[string]int)
-	for i, container := range containers {
-		containerMap[container.ID] = i + 1
-	}
-	return containerMap
 }
 
 func updateContainerRow(table *tview.Table, row int, containerInfo *docker.ContainerInfo) {
