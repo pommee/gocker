@@ -6,7 +6,8 @@ target=""
 githubUrl=""
 executable_folder=$(eval echo "~/.local/bin")
 config_folder=$(eval echo "$HOME/.config/gocker/theming")
-default_yml_url="https://raw.githubusercontent.com/pommee/gocker/main/theming/default.yml"
+default_theme_url="https://raw.githubusercontent.com/pommee/gocker/main/theming/default.yml"
+default_theme_path="${config_folder}/default.yml"
 
 get_arch() {
     case $(uname -m) in
@@ -30,10 +31,15 @@ get_latest_release() {
     sed -E 's/.*"v([^"]+)".*/\1/'
 }
 
-download_default_yml() {
-    echo "[4/4] Downloading default.yml to ${config_folder}/default.yml"
+download_default_theme() {
+    if [ -f "${default_theme_path}" ]; then
+        # [4/4] The default.yml file already exists. Skipping download.
+        return
+    fi
+
+    echo "[4/4] Downloading default.yml to ${default_theme_path}"
     mkdir -p "${config_folder}"
-    curl -L -o "${config_folder}/default.yml" "${default_yml_url}"
+    curl -L -o "${default_theme_path}" "${default_theme_url}"
 }
 
 main() {
@@ -67,7 +73,7 @@ main() {
 
     echo "[3/3] gocker was installed successfully to ${executable_folder}"
 
-    download_default_yml
+    download_default_theme
 
     echo "Manually add the directory to your \$HOME/.bash_profile (or similar):"
     echo "  export PATH=${executable_folder}:\$PATH"
