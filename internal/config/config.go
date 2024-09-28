@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 )
@@ -21,7 +22,9 @@ type Theme struct {
 }
 
 func LoadTheme() *Theme {
-	data, err := os.ReadFile("./theming/default.yml")
+	home, _ := os.UserHomeDir()
+	themePath := filepath.Join(home, ".config", "gocker", "theming", "default.yml")
+	data, err := os.ReadFile(themePath)
 	if err != nil {
 		log.Printf("error reading file: %v", err)
 	}

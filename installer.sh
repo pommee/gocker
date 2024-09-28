@@ -5,6 +5,8 @@ set -e
 target=""
 githubUrl=""
 executable_folder=$(eval echo "~/.local/bin")
+config_folder=$(eval echo "$HOME/.config/gocker/theming")
+default_yml_url="https://raw.githubusercontent.com/pommee/gocker/main/theming/default.yml"
 
 get_arch() {
     case $(uname -m) in
@@ -26,6 +28,12 @@ get_latest_release() {
     curl --silent "https://api.github.com/repos/pommee/gocker/releases/latest" |
     grep '"tag_name":' |
     sed -E 's/.*"v([^"]+)".*/\1/'
+}
+
+download_default_yml() {
+    echo "[4/4] Downloading default.yml to ${config_folder}/default.yml"
+    mkdir -p "${config_folder}"
+    curl -L -o "${config_folder}/default.yml" "${default_yml_url}"
 }
 
 main() {
@@ -58,6 +66,9 @@ main() {
     chmod +x "${executable_folder}/gocker"
 
     echo "[3/3] gocker was installed successfully to ${executable_folder}"
+
+    download_default_yml
+
     echo "Manually add the directory to your \$HOME/.bash_profile (or similar):"
     echo "  export PATH=${executable_folder}:\$PATH"
     exit 0
