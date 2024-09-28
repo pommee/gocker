@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -14,7 +15,8 @@ func DrawLogs(table *tview.Table, containerID string) {
 	inputField := createInputField(table, textView, containerID)
 	footer := CreateFooterLogs()
 
-	go dockerClient.ListenForNewLogs(containerID, app, textView)
+	ctx, cancel := context.WithCancel(context.Background())
+	go dockerClient.ListenForNewLogs(ctx, containerID, app, textView)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(textView, 0, 1, false).
@@ -29,6 +31,7 @@ func DrawLogs(table *tview.Table, containerID string) {
 			app.SetFocus(inputField)
 		}
 		if event.Key() == tcell.KeyEscape {
+			cancel()
 			DrawHome()
 			return nil
 		}

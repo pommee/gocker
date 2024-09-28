@@ -173,103 +173,137 @@ func calculateMemoryUsageMb(stats *types.StatsJSON) float64 {
 	return float64(stats.MemoryStats.Usage) / float64(1024*1024)
 }
 
-func (dc *DockerWrapper) ListenForNewLogs(id string, app *tview.Application, textView *tview.TextView) {
+func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *tview.Application, textView *tview.TextView) {
+	initialLogs, err := dc.fetchContainerLogs(id, false, "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error fetching container logs: %v\n", err)
+		return
+	}
+
+	highlightedLogs := dc.highlightLogs(initialLogs)
+	app.QueueUpdateDraw(func() {
+		fmt.Fprint(tview.ANSIWriter(textView), highlightedLogs)
+		textView.ScrollToEnd()
+	})
+
+	liveLogs, err := dc.startLogStream(id)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error fetching live logs: %v\n", err)
+		return
+	}
+	defer liveLogs.Close()
+
+	dc.streamLogs(ctx, liveLogs, app, textView)
+}
+
+func (dc *DockerWrapper) fetchContainerLogs(id string, follow bool, since string) (string, error) {
 	logOptions := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
-		Follow:     false,
+		Follow:     follow,
+		Since:      since,
 	}
 
 	out, err := dc.client.ContainerLogs(context.Background(), id, logOptions)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching container logs: %v\n", err)
-		return
+		return "", err
 	}
 	defer out.Close()
 
-	var initialLogBuffer bytes.Buffer
+	var logBuffer bytes.Buffer
 	header := make([]byte, 8)
-
 	for {
 		_, err := io.ReadFull(out, header)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-			fmt.Fprintf(os.Stderr, "Error reading log header: %v\n", err)
-			return
+			return "", fmt.Errorf("error reading log header: %v", err)
 		}
 
-		logLength := int64(header[4])<<24 | int64(header[5])<<16 | int64(header[6])<<8 | int64(header[7])
-		logMessage := make([]byte, logLength)
-		_, err = io.ReadFull(out, logMessage)
+		logMessage, err := dc.readLogMessage(out, header)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading log message: %v\n", err)
-			return
+			return "", err
 		}
 
-		initialLogBuffer.Write(logMessage)
+		logBuffer.Write(logMessage)
 	}
 
+	return logBuffer.String(), nil
+}
+
+func (dc *DockerWrapper) startLogStream(id string) (io.ReadCloser, error) {
+	logOptions := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+		Since:      time.Now().Format(time.RFC3339),
+	}
+
+	out, err := dc.client.ContainerLogs(context.Background(), id, logOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+func (dc *DockerWrapper) streamLogs(ctx context.Context, out io.ReadCloser, app *tview.Application, textView *tview.TextView) {
+	header := make([]byte, 8)
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("Context canceled, stopping log stream.")
+			return
+		default:
+			_, err := io.ReadFull(out, header)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				fmt.Fprintf(os.Stderr, "Error reading log header: %v\n", err)
+				return
+			}
+
+			logMessage, err := dc.readLogMessage(out, header)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading log message: %v\n", err)
+				return
+			}
+
+			highlightedLog := dc.highlightLogs(string(logMessage))
+			app.QueueUpdateDraw(func() {
+				fmt.Fprint(tview.ANSIWriter(textView), highlightedLog)
+				textView.ScrollToEnd()
+			})
+		}
+	}
+}
+
+func (dc *DockerWrapper) readLogMessage(out io.Reader, header []byte) ([]byte, error) {
+	/*
+		This is due to multiplexing.
+		Byte 1: Stream indicator (0x01 for stdout, 0x02 for stderr).
+		Bytes 2-4: Unused (set to 0x00).
+		Bytes 5-8: Big-endian 32-bit integer representing the length of the log message.
+	*/
+	logLength := int64(header[4])<<24 | int64(header[5])<<16 | int64(header[6])<<8 | int64(header[7])
+	logMessage := make([]byte, logLength)
+	_, err := io.ReadFull(out, logMessage)
+	if err != nil {
+		return nil, fmt.Errorf("error reading log message: %v", err)
+	}
+	return logMessage, nil
+}
+
+func (dc *DockerWrapper) highlightLogs(logs string) string {
 	var highlightedBuffer bytes.Buffer
-	err = quick.Highlight(&highlightedBuffer, initialLogBuffer.String(), "Docker", "terminal16m", "monokai")
+	err := quick.Highlight(&highlightedBuffer, logs, "Docker", "terminal16m", "monokai")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error highlighting initial log content: %v\n", err)
-		highlightedBuffer.Write(initialLogBuffer.Bytes())
+		fmt.Fprintf(os.Stderr, "Error highlighting log content: %v\n", err)
+		highlightedBuffer.WriteString(logs)
 	}
-
-	app.QueueUpdateDraw(func() {
-		fmt.Fprint(tview.ANSIWriter(textView), highlightedBuffer.String())
-		textView.ScrollToEnd()
-	})
-
-	// now start live fetching logs
-	logOptions.Follow = true
-	logOptions.Since = time.Now().Format(time.RFC3339)
-	out, err = dc.client.ContainerLogs(context.Background(), id, logOptions)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching container logs: %v\n", err)
-		return
-	}
-	defer out.Close()
-
-	header = make([]byte, 8)
-	for {
-		_, err := io.ReadFull(out, header)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			fmt.Fprintf(os.Stderr, "Error reading log header: %v\n", err)
-			return
-		}
-
-		/*
-			This is due to multiplexing.
-			Byte 1: Stream indicator (0x01 for stdout, 0x02 for stderr).
-			Bytes 2-4: Unused (set to 0x00).
-			Bytes 5-8: Big-endian 32-bit integer representing the length of the log message.
-		*/
-		logLength := int64(header[4])<<24 | int64(header[5])<<16 | int64(header[6])<<8 | int64(header[7])
-		logMessage := make([]byte, logLength)
-		_, err = io.ReadFull(out, logMessage)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading log message: %v\n", err)
-			return
-		}
-
-		var highlightedBuffer bytes.Buffer
-		err = quick.Highlight(&highlightedBuffer, string(logMessage), "Docker", "terminal16m", "monokai")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error highlighting log content: %v\n", err)
-			highlightedBuffer.Write(logMessage)
-		}
-
-		app.QueueUpdateDraw(func() {
-			fmt.Fprint(tview.ANSIWriter(textView), highlightedBuffer.String())
-			textView.ScrollToEnd()
-		})
-	}
+	return highlightedBuffer.String()
 }
 
 func (dc *DockerWrapper) PauseContainer(id string) {
