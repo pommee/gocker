@@ -25,7 +25,7 @@ func CreateFooterLogs() *tview.TextView {
 		createSection("ESC", "back") +
 			createSection("ENTER", "search") +
 			createSection("A", "attributes") +
-			createSection("I", "image"),
+			createSection("E", "environment"),
 	)
 	return footer
 }

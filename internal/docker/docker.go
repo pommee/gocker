@@ -85,6 +85,18 @@ func (dc *DockerWrapper) GetDockerVolumes() []*volume.Volume {
 	return dockerVolumes.Volumes
 }
 
+func (dc *DockerWrapper) GetAttributes(containerID string) string {
+	containerInfo, _ := dc.client.ContainerInspect(context.Background(), containerID)
+	infoJSON, _ := json.MarshalIndent(containerInfo, "", "  ")
+	return string(infoJSON)
+}
+
+func (dc *DockerWrapper) GetEnvironmentVariables(containerID string) string {
+	containerInfo, _ := dc.client.ContainerInspect(context.Background(), containerID)
+	envVars, _ := json.MarshalIndent(containerInfo.Config.Env, "", "  ")
+	return string(envVars)
+}
+
 func (dc *DockerWrapper) ListenForEvents(ctx context.Context, eventChan chan<- events.Message) {
 	eventFilter := filters.NewArgs()
 	eventFilter.Add("type", "container")

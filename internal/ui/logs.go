@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -9,9 +10,11 @@ import (
 )
 
 func DrawLogs(table *tview.Table, containerID string) {
-	textView := createTextView(containerID)
-	inputField := createLogsInputField(table, textView, containerID)
+	textView := createTextView()
+	inputField := createInputField(table, textView, containerID)
 	footer := CreateFooterLogs()
+
+	go dockerClient.ListenForNewLogs(containerID, app, textView)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(textView, 0, 1, false).
@@ -29,23 +32,141 @@ func DrawLogs(table *tview.Table, containerID string) {
 			DrawHome()
 			return nil
 		}
+		if event.Rune() == 'a' {
+			showAttributes(containerID, table)
+			return nil
+		}
+		if event.Rune() == 'e' {
+			showEnvironmentVariables(containerID, table)
+			return nil
+		}
 		return nil
 	})
 
 	app.SetRoot(flex, true).SetFocus(textView)
 }
 
-func createTextView(containerID string) *tview.TextView {
+func showAttributes(containerID string, table *tview.Table) {
+	containerInfo, _ := highlightJSON(dockerClient.GetAttributes(containerID))
+	textView := createTextView()
+	textView.SetText(containerInfo)
+	inputField := createInputField(table, textView, containerID)
+	footer := CreateFooterLogs()
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(textView, 0, 1, false).
+		AddItem(footer, 1, 1, false)
+
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			flex.Clear()
+			flex.AddItem(inputField, 1, 0, false).
+				AddItem(textView, 0, 1, false).
+				AddItem(footer, 1, 1, false)
+			app.SetFocus(inputField)
+		}
+		if event.Key() == tcell.KeyESC {
+			DrawHome()
+		}
+		return nil
+	})
+
+	app.SetRoot(flex, true).SetFocus(textView)
+}
+
+func showEnvironmentVariables(containerID string, table *tview.Table) {
+	containerInfo, _ := highlightJSON(dockerClient.GetEnvironmentVariables(containerID))
+	textView := createTextView()
+	textView.SetText(containerInfo)
+	inputField := createInputField(table, textView, containerID)
+	footer := CreateFooterLogs()
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(textView, 0, 1, false).
+		AddItem(footer, 1, 1, false)
+
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			flex.Clear()
+			flex.AddItem(inputField, 1, 0, false).
+				AddItem(textView, 0, 1, false).
+				AddItem(footer, 1, 1, false)
+			app.SetFocus(inputField)
+		}
+		if event.Key() == tcell.KeyESC {
+			DrawHome()
+		}
+		return nil
+	})
+
+	app.SetRoot(flex, true).SetFocus(textView)
+}
+
+func highlightJSON(jsonStr string) (string, error) {
+	var jsonData interface{}
+
+	err := json.Unmarshal([]byte(jsonStr), &jsonData)
+	if err != nil {
+		return "", err
+	}
+
+	highlighted := new(strings.Builder)
+	err = walkAndHighlight(jsonData, highlighted, 0)
+	if err != nil {
+		return "", err
+	}
+
+	return highlighted.String(), nil
+}
+
+func walkAndHighlight(data interface{}, builder *strings.Builder, indentLevel int) error {
+	indent := strings.Repeat("  ", indentLevel)
+
+	switch v := data.(type) {
+	case map[string]interface{}:
+		builder.WriteString("{\n")
+		for key, value := range v {
+			builder.WriteString(fmt.Sprintf("%s[green]\"%s\"[white]: ", indent+"  ", key))
+			if err := walkAndHighlight(value, builder, indentLevel+1); err != nil {
+				return err
+			}
+			builder.WriteString(",\n")
+		}
+		builder.WriteString(indent + "}")
+	case []interface{}:
+		builder.WriteString("[\n")
+		for _, value := range v {
+			builder.WriteString(indent + "  ")
+			if err := walkAndHighlight(value, builder, indentLevel+1); err != nil {
+				return err
+			}
+			builder.WriteString(",\n")
+		}
+		builder.WriteString(indent + "]")
+	case string:
+		builder.WriteString(fmt.Sprintf("[yellow]\"%s\"[white]", v))
+	case float64, int:
+		builder.WriteString(fmt.Sprintf("[blue]%v[white]", v))
+	case bool:
+		builder.WriteString(fmt.Sprintf("[magenta]%v[white]", v))
+	case nil:
+		builder.WriteString("[gray]null[white]")
+	default:
+		builder.WriteString(fmt.Sprintf("%v", v))
+	}
+
+	return nil
+}
+
+func createTextView() *tview.TextView {
 	textView := tview.NewTextView().SetDynamicColors(true).SetRegions(true).SetChangedFunc(func() {
 		app.Draw()
 	})
 
-	go dockerClient.ListenForNewLogs(containerID, app, textView)
-
 	return textView
 }
 
-func createLogsInputField(table *tview.Table, textView *tview.TextView, containerID string) *tview.InputField {
+func createInputField(table *tview.Table, textView *tview.TextView, containerID string) *tview.InputField {
 	inputField := tview.NewInputField()
 	inputField.SetFieldTextColor(tcell.ColorWhite)
 	inputField.SetPlaceholderTextColor(tcell.ColorLightGray)
@@ -102,11 +223,14 @@ func searchLogs(textView *tview.TextView, keyword string) []string {
 
 	var matchingRegions []string
 	var highlightedText strings.Builder
+	lowerKeyword := strings.ToLower(keyword)
 
 	for index, line := range lines {
-		if strings.Contains(line, keyword) {
+		lowerLine := strings.ToLower(line)
+		if strings.Contains(lowerLine, lowerKeyword) {
 			regionID := fmt.Sprintf("match%d", index)
-			highlightedText.WriteString(fmt.Sprintf(`["%s"]%s[""]`, regionID, highlightLine(line, keyword)))
+			highlightedLine := highlightAllMatches(line, lowerLine, lowerKeyword)
+			highlightedText.WriteString(fmt.Sprintf(`["%s"]%s[""]`, regionID, highlightedLine))
 			matchingRegions = append(matchingRegions, regionID)
 		} else {
 			highlightedText.WriteString(fmt.Sprintf("[gray:black]%s\n", line))
@@ -117,16 +241,23 @@ func searchLogs(textView *tview.TextView, keyword string) []string {
 	return matchingRegions
 }
 
-func highlightLine(line, keyword string) string {
+func highlightAllMatches(line, lowerLine, lowerKeyword string) string {
 	var highlightedLine strings.Builder
-	parts := strings.Split(line, keyword)
+	start := 0
+	keywordLen := len(lowerKeyword)
 
-	for i, part := range parts {
-		if i > 0 {
-			highlightedLine.WriteString(fmt.Sprintf("[orange:black]%s[white:black]", keyword))
+	for {
+		startIndex := strings.Index(lowerLine[start:], lowerKeyword)
+		if startIndex == -1 {
+			highlightedLine.WriteString(line[start:])
+			break
 		}
-		highlightedLine.WriteString(fmt.Sprintf("[white:black]%s", part))
+
+		highlightedLine.WriteString(line[start : start+startIndex])
+		highlightedLine.WriteString(fmt.Sprintf("[orange:black]%s[white:black]", line[start+startIndex:start+startIndex+keywordLen]))
+		start += startIndex + keywordLen
 	}
+
 	highlightedLine.WriteString("\n")
 	return highlightedLine.String()
 }
