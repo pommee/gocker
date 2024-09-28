@@ -18,7 +18,9 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"golang.org/x/term"
 )
 
 type DockerImage struct {
@@ -122,6 +124,67 @@ func (dc *DockerWrapper) ListenForEvents(ctx context.Context, eventChan chan<- e
 	}
 }
 
+func (dc *DockerWrapper) CreateContainerShell(ctx context.Context, containerID string, textView *tview.TextView) error {
+	execConfig := container.ExecOptions{
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		Tty:          true,
+		Cmd:          []string{"/bin/bash"},
+	}
+
+	resp, err := dc.client.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return err
+	}
+
+	attachResp, err := dc.client.ContainerExecAttach(ctx, resp.ID, container.ExecAttachOptions{Tty: true})
+	if err != nil {
+		return err
+	}
+
+	err = dc.client.ContainerExecStart(ctx, resp.ID, container.ExecAttachOptions{Tty: true})
+	if err != nil {
+		return err
+	}
+
+	inputReader, inputWriter := io.Pipe()
+	dc.updateTerminalSize(ctx, resp.ID)
+
+	go func() {
+		io.Copy(tview.ANSIWriter(textView), attachResp.Reader)
+		textView.ScrollToEnd()
+	}()
+
+	go func() {
+		io.Copy(attachResp.Conn, inputReader)
+	}()
+
+	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			inputWriter.Write([]byte("\n"))
+		} else if event.Key() == tcell.KeyCtrlC {
+			return event
+		} else {
+			inputWriter.Write([]byte(string(event.Rune())))
+		}
+		return nil
+	})
+
+	return nil
+}
+
+func (dc *DockerWrapper) updateTerminalSize(ctx context.Context, execID string) {
+	width, height, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return
+	}
+
+	dc.client.ContainerExecResize(ctx, execID, container.ResizeOptions{
+		Height: uint(height),
+		Width:  uint(width),
+	})
+}
 func (dc *DockerWrapper) GetContainerInfo(id string) (*ContainerInfo, error) {
 	container, err := dc.client.ContainerInspect(context.Background(), id)
 	if err != nil {
@@ -253,7 +316,7 @@ func (dc *DockerWrapper) streamLogs(ctx context.Context, out io.ReadCloser, app 
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("Context canceled, stopping log stream.")
+			log.Println("Context canceled, stopping log stream.")
 			return
 		default:
 			_, err := io.ReadFull(out, header)

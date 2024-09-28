@@ -22,87 +22,60 @@ func DrawLogs(table *tview.Table, containerID string) {
 		AddItem(textView, 0, 1, false).
 		AddItem(footer, 1, 1, false)
 
+	var isShellMode bool
+
 	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter {
+		if isShellMode {
+			return event
+		}
+
+		switch event.Key() {
+		case tcell.KeyEnter:
 			flex.Clear()
 			flex.AddItem(inputField, 1, 0, false).
 				AddItem(textView, 0, 1, false).
 				AddItem(footer, 1, 1, false)
 			app.SetFocus(inputField)
-		}
-		if event.Key() == tcell.KeyEscape {
+		case tcell.KeyEscape:
 			cancel()
 			DrawHome()
 			return nil
 		}
-		if event.Rune() == 'a' {
-			showAttributes(containerID, table)
-			return nil
+
+		switch event.Rune() {
+		case 'a':
+			cancel()
+			textView.Clear()
+			textView.SetText(getAttributes(containerID))
+		case 'e':
+			cancel()
+			textView.Clear()
+			textView.SetText(getEnvironmentVariables(containerID))
+		case 'v':
+			cancel()
+			textView.Clear()
+			err := dockerClient.CreateContainerShell(context.Background(), containerID, textView)
+			if err != nil {
+				fmt.Fprintf(textView, "Error creating shell: %v", err)
+			} else {
+				isShellMode = true
+			}
 		}
-		if event.Rune() == 'e' {
-			showEnvironmentVariables(containerID, table)
-			return nil
-		}
-		return nil
+
+		return event
 	})
 
 	app.SetRoot(flex, true).SetFocus(textView)
 }
 
-func showAttributes(containerID string, table *tview.Table) {
+func getAttributes(containerID string) string {
 	containerInfo, _ := highlightJSON(dockerClient.GetAttributes(containerID))
-	textView := createTextView()
-	textView.SetText(containerInfo)
-	inputField := createInputField(table, textView, containerID)
-	footer := CreateFooterLogs()
-
-	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(textView, 0, 1, false).
-		AddItem(footer, 1, 1, false)
-
-	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter {
-			flex.Clear()
-			flex.AddItem(inputField, 1, 0, false).
-				AddItem(textView, 0, 1, false).
-				AddItem(footer, 1, 1, false)
-			app.SetFocus(inputField)
-		}
-		if event.Key() == tcell.KeyESC {
-			DrawHome()
-		}
-		return nil
-	})
-
-	app.SetRoot(flex, true).SetFocus(textView)
+	return containerInfo
 }
 
-func showEnvironmentVariables(containerID string, table *tview.Table) {
-	containerInfo, _ := highlightJSON(dockerClient.GetEnvironmentVariables(containerID))
-	textView := createTextView()
-	textView.SetText(containerInfo)
-	inputField := createInputField(table, textView, containerID)
-	footer := CreateFooterLogs()
-
-	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(textView, 0, 1, false).
-		AddItem(footer, 1, 1, false)
-
-	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter {
-			flex.Clear()
-			flex.AddItem(inputField, 1, 0, false).
-				AddItem(textView, 0, 1, false).
-				AddItem(footer, 1, 1, false)
-			app.SetFocus(inputField)
-		}
-		if event.Key() == tcell.KeyESC {
-			DrawHome()
-		}
-		return nil
-	})
-
-	app.SetRoot(flex, true).SetFocus(textView)
+func getEnvironmentVariables(containerID string) string {
+	environmentVariables, _ := highlightJSON(dockerClient.GetEnvironmentVariables(containerID))
+	return environmentVariables
 }
 
 func highlightJSON(jsonStr string) (string, error) {
