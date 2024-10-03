@@ -16,11 +16,12 @@ import (
 )
 
 var (
-	app          *tview.Application
-	dockerClient = docker.DockerWrapper{}
-	containerMap = make(map[string]int)
-	mapMutex     sync.Mutex // Mutex for synchronizing access to containerMap
-	theme        = config.LoadTheme()
+	app             *tview.Application
+	dockerClient    = docker.DockerWrapper{}
+	containerMap    = make(map[string]int)
+	mapMutex        sync.Mutex // Mutex for synchronizing access to containerMap
+	theme           = config.LoadTheme()
+	showOnlyRunning bool
 )
 
 func Start() {
@@ -92,7 +93,7 @@ func setupContainerTable() *tview.Table {
 	table.SetBackgroundColor(tcell.GetColor(theme.Table.Fg))
 	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.GetColor(theme.Table.Selected)))
 
-	headers := []string{"ID", "Container", "Image", "Uptime", "Status", "CPU", "Memory"}
+	headers := []string{"ID", "Container", "Image", "Uptime", "Status", "CPU / MEM"}
 	for i, header := range headers {
 		table.SetCell(0, i, tview.NewTableCell(header).
 			SetTextColor(tcell.GetColor(theme.Table.Headers)).
@@ -130,13 +131,39 @@ func handleInput(event *tcell.EventKey, table *tview.Table) *tcell.EventKey {
 		showHelpModal(table)
 		return nil
 	}
+	if event.Rune() == '1' {
+		showOnlyRunning = true
+		updateFilteredContainers(table)
+		return nil
+	}
+	if event.Rune() == '2' {
+		showOnlyRunning = false
+		updateFilteredContainers(table)
+		return nil
+	}
 	return event
+}
+
+func updateFilteredContainers(table *tview.Table) {
+	containers := dockerClient.GetContainers(true)
+
+	var filteredContainers []types.Container
+	if showOnlyRunning {
+		for _, container := range containers {
+			if container.State == "running" {
+				filteredContainers = append(filteredContainers, container)
+			}
+		}
+	} else {
+		filteredContainers = containers
+	}
+
+	updateTableWithContainers(table, filteredContainers)
 }
 
 func handleDockerEvent(event events.Message, table *tview.Table) {
 	log.Printf("[event] Action: %s, ID: %s, Status: %s", event.Action, event.ID, event.Status)
 
-	// Refresh the table when containers start or stop
 	if event.Action == "start" || event.Action == "stop" {
 		app.QueueUpdateDraw(func() {
 			containers := dockerClient.GetContainers(true)
@@ -194,19 +221,33 @@ func showHelpModal(table *tview.Table) {
 }
 
 func updateTableWithContainers(table *tview.Table, containers []types.Container) {
-	// Clear previous mappings
 	mapMutex.Lock()
-	defer mapMutex.Unlock() // Ensure we unlock after updating
+	defer mapMutex.Unlock()
 
 	containerMap = make(map[string]int)
+	table.Clear()
 
-	for rowIndex, container := range containers {
+	headers := []string{"ID", "Container", "Image", "Uptime", "Status", "CPU / MEM"}
+	for i, header := range headers {
+		table.SetCell(0, i, tview.NewTableCell(header).
+			SetTextColor(tcell.GetColor(theme.Table.Headers)).
+			SetExpansion(1).
+			SetSelectable(false))
+	}
+
+	currentRow := 1
+
+	for _, container := range containers {
+		if showOnlyRunning && container.State != "running" {
+			continue
+		}
+
 		go func(container types.Container, row int) {
 			containerInfo, err := dockerClient.GetContainerInfo(container.ID)
 			if err != nil {
 				log.Printf("Error getting container info for %s: %v", container.ID, err)
 				app.QueueUpdateDraw(func() {
-					mapMutex.Lock() // Lock the map during access
+					mapMutex.Lock()
 					defer mapMutex.Unlock()
 					table.RemoveRow(row)
 					delete(containerMap, container.ID)
@@ -221,7 +262,9 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 			app.QueueUpdateDraw(func() {
 				updateContainerRow(table, row, containerInfo)
 			})
-		}(container, rowIndex+1)
+		}(container, currentRow)
+
+		currentRow++ // Increment the row count only for "valid" containers
 	}
 }
 
@@ -231,6 +274,5 @@ func updateContainerRow(table *tview.Table, row int, containerInfo *docker.Conta
 	table.SetCell(row, 2, tview.NewTableCell(containerInfo.Image))
 	table.SetCell(row, 3, tview.NewTableCell(containerInfo.Uptime.String()))
 	table.SetCell(row, 4, tview.NewTableCell(containerInfo.State))
-	table.SetCell(row, 5, tview.NewTableCell(fmt.Sprintf("%.2f%%", containerInfo.CPUUsage)))
-	table.SetCell(row, 6, tview.NewTableCell(fmt.Sprintf("%.2f MB", containerInfo.MemoryUsage)))
+	table.SetCell(row, 5, tview.NewTableCell(fmt.Sprintf("%.2f%% / %.2f MB", containerInfo.CPUUsage, containerInfo.MemoryUsage)))
 }
