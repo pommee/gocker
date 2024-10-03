@@ -1,11 +1,18 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"main/internal/ui"
 	"os"
 	"path/filepath"
+
+	"github.com/fatih/color"
 )
+
+var version string
+var commit string
+var date string
 
 func setupLogging() {
 	homeDir, err := os.UserHomeDir()
@@ -23,7 +30,48 @@ func setupLogging() {
 	log.SetOutput(file)
 }
 
+func help() {
+	fmt.Println("@TODO")
+	os.Exit(0)
+}
+
+func update() {
+	fmt.Println("@TODO")
+	os.Exit(0)
+}
+
+func info() {
+	blue := color.New(color.FgHiBlue).Add(color.Bold)
+
+	printInfo := func(label, value string) {
+		blue.Printf("%-10s ", label)
+		fmt.Println(value)
+	}
+
+	printInfo("Version", version)
+	printInfo("Commit", commit)
+	printInfo("Date", date)
+	os.Exit(0)
+}
+
 func main() {
 	setupLogging()
+	argsWithoutProg := os.Args[1:]
+
+	for _, arg := range argsWithoutProg {
+		if arg == "help" {
+			help()
+			break
+		}
+		if arg == "update" {
+			update()
+			break
+		}
+		if arg == "info" {
+			info()
+			break
+		}
+	}
+
 	ui.Start()
 }
