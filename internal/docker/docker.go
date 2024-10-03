@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/alecthomas/chroma/quick"
@@ -243,11 +245,69 @@ func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *t
 		return
 	}
 
-	highlightedLogs := dc.highlightLogs(initialLogs)
+	const (
+		chunkSize    = 60_000
+		maxDisplayed = 500_000
+	)
+
+	type processedChunk struct {
+		index int
+		data  string
+	}
+
+	start := time.Now()
+	numChunks := (len(initialLogs) + chunkSize - 1) / chunkSize
+	chunkChan := make(chan processedChunk, numChunks)
+	chunks := make([]processedChunk, numChunks)
+
+	var wg sync.WaitGroup
+	wg.Add(numChunks)
+
+	// Process logs in chunks
+	for i := 0; i < numChunks; i++ {
+		go func(index int) {
+			defer wg.Done()
+			start := index * chunkSize
+			end := (index + 1) * chunkSize
+			if end > len(initialLogs) {
+				end = len(initialLogs)
+			}
+			chunk := initialLogs[start:end]
+			highlightedChunk := dc.highlightLogs(chunk)
+			chunkChan <- processedChunk{index: index, data: highlightedChunk}
+		}(i)
+	}
+
+	// Collect processed chunks
+	go func() {
+		for chunk := range chunkChan {
+			chunks[chunk.index] = chunk
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(chunkChan)
+	}()
+
+	wg.Wait()
+
+	var sb strings.Builder
+	sb.Grow(len(initialLogs) * 100)
+	for _, chunk := range chunks {
+		sb.WriteString(chunk.data)
+	}
+
+	allLogs := sb.String()
+	lastLogs := getLastNLines(allLogs, maxDisplayed)
+
 	app.QueueUpdateDraw(func() {
-		fmt.Fprint(tview.ANSIWriter(textView), highlightedLogs)
+		textView.Clear()
+		fmt.Fprint(tview.ANSIWriter(textView), lastLogs)
 		textView.ScrollToEnd()
 	})
+
+	log.Println("Processing log lines took:", time.Since(start))
 
 	liveLogs, err := dc.startLogStream(id)
 	if err != nil {
@@ -257,6 +317,14 @@ func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *t
 	defer liveLogs.Close()
 
 	dc.streamLogs(ctx, liveLogs, app, textView)
+}
+
+func getLastNLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		return strings.Join(lines[len(lines)-n:], "\n")
+	}
+	return s
 }
 
 func (dc *DockerWrapper) fetchContainerLogs(id string, follow bool, since string) (string, error) {
