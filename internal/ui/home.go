@@ -7,7 +7,6 @@ import (
 	"main/internal/config"
 	"main/internal/docker"
 	"sync"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/events"
@@ -32,13 +31,11 @@ func Start() {
 
 func DrawHome() {
 	app.EnableMouse(true)
-
-	helper := CreateHelper()
 	containerList := createContainerList()
 	footer := CreateFooterHome()
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(helper, 4, 1, false).
+		AddItem(CreateHelper(), 4, 1, false).
 		AddItem(containerList, 0, 1, true).
 		AddItem(footer, 1, 1, true)
 
@@ -52,38 +49,22 @@ func createContainerList() *tview.Table {
 	initialContainers := dockerClient.GetContainers(true)
 	updateTableWithContainers(table, initialContainers)
 
-	table.Select(1, 0)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	eventChan := make(chan events.Message)
+
 	startDockerEventListener(ctx, eventChan, table)
-	go startContainerStatsFetching(ctx, table)
 
 	table.SetSelectedFunc(func(row, column int) {
+		if !showOnlyRunning {
+			row -= 1
+		}
 		handleContainerSelection(row, initialContainers, cancel, table)
 	})
-	table.SetDoneFunc(handleDone)
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		return handleInput(event, table)
 	})
 
 	return table
-}
-
-func startContainerStatsFetching(ctx context.Context, table *tview.Table) {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("Stopped container stats fetching.")
-			return
-		case <-ticker.C:
-			containers := dockerClient.GetContainers(true)
-			updateTableWithContainers(table, containers)
-		}
-	}
 }
 
 func setupContainerTable() *tview.Table {
@@ -115,76 +96,64 @@ func startDockerEventListener(ctx context.Context, eventChan chan events.Message
 }
 
 func handleContainerSelection(row int, containers []types.Container, cancel context.CancelFunc, table *tview.Table) {
-	containerID := containers[row-1].ID
-	cancel() // Cancel the fetching goroutine
-	DrawLogs(table, containerID)
-}
+	var containerID string
+	log.Println(row)
 
-func handleDone(key tcell.Key) {
-	if key == tcell.KeyEscape {
-		app.Stop()
-	}
-}
-
-func handleInput(event *tcell.EventKey, table *tview.Table) *tcell.EventKey {
-	if event.Rune() == '?' {
-		showHelpModal(table)
-		return nil
-	}
-	if event.Rune() == '1' {
-		showOnlyRunning = true
-		updateFilteredContainers(table)
-		return nil
-	}
-	if event.Rune() == '2' {
-		showOnlyRunning = false
-		updateFilteredContainers(table)
-		return nil
-	}
-	return event
-}
-
-func updateFilteredContainers(table *tview.Table) {
-	containers := dockerClient.GetContainers(true)
-
-	var filteredContainers []types.Container
 	if showOnlyRunning {
+		var runningContainers []types.Container
 		for _, container := range containers {
 			if container.State == "running" {
-				filteredContainers = append(filteredContainers, container)
+				runningContainers = append(runningContainers, container)
 			}
 		}
+		containerID = runningContainers[row-1].ID
 	} else {
-		filteredContainers = containers
+		containerID = containers[row].ID
 	}
 
-	updateTableWithContainers(table, filteredContainers)
+	cancel()
+	DrawLogs(table, containerID)
 }
 
 func handleDockerEvent(event events.Message, table *tview.Table) {
 	log.Printf("[event] Action: %s, ID: %s, Status: %s", event.Action, event.ID, event.Status)
 
-	if event.Action == "start" || event.Action == "stop" {
-		app.QueueUpdateDraw(func() {
-			containers := dockerClient.GetContainers(true)
-			updateTableWithContainers(table, containers)
-		})
-	}
-
-	if event.Action == "destroy" {
-		app.QueueUpdateDraw(func() {
-			mapMutex.Lock() // Lock the map for safe access
+	app.QueueUpdateDraw(func() {
+		switch event.Action {
+		case "start", "stop":
+			updateTableWithContainers(table, dockerClient.GetContainers(true))
+		case "destroy":
+			mapMutex.Lock()
 			defer mapMutex.Unlock()
 			if row, exists := containerMap[event.ID]; exists {
 				table.RemoveRow(row)
 				delete(containerMap, event.ID)
 			}
-		})
-	}
+		}
+	})
 }
 
-func createHelpCell(key string, helpText string) *tview.TableCell {
-	return tview.NewTableCell(fmt.Sprintf("[orange]%-20s[white]%s", key, helpText))
+func handleInput(event *tcell.EventKey, table *tview.Table) *tcell.EventKey {
+	switch event.Rune() {
+	case '?':
+		showHelpModal(table)
+		return nil
+	case '1':
+		if showOnlyRunning {
+			return nil
+		}
+		showOnlyRunning = true
+		updateFilteredContainers(table)
+		return nil
+	case '2':
+		if !showOnlyRunning {
+			return nil
+		}
+		showOnlyRunning = false
+		updateFilteredContainers(table)
+		return nil
+	}
+	return event
 }
 
 func showHelpModal(table *tview.Table) {
@@ -220,6 +189,27 @@ func showHelpModal(table *tview.Table) {
 	table.SetCell(2, 2, createHelpCell("<k/arrow-up>  ", "up"))
 }
 
+func createHelpCell(key string, helpText string) *tview.TableCell {
+	return tview.NewTableCell(fmt.Sprintf("[orange]%-20s[white]%s", key, helpText))
+}
+
+func updateFilteredContainers(table *tview.Table) {
+	containers := dockerClient.GetContainers(true)
+
+	var filteredContainers []types.Container
+	if showOnlyRunning {
+		for _, container := range containers {
+			if container.State == "running" {
+				filteredContainers = append(filteredContainers, container)
+			}
+		}
+	} else {
+		filteredContainers = containers
+	}
+
+	updateTableWithContainers(table, filteredContainers)
+}
+
 func updateTableWithContainers(table *tview.Table, containers []types.Container) {
 	mapMutex.Lock()
 	defer mapMutex.Unlock()
@@ -236,7 +226,6 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 	}
 
 	currentRow := 1
-
 	for _, container := range containers {
 		if showOnlyRunning && container.State != "running" {
 			continue
@@ -246,12 +235,6 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 			containerInfo, err := dockerClient.GetContainerInfo(container.ID)
 			if err != nil {
 				log.Printf("Error getting container info for %s: %v", container.ID, err)
-				app.QueueUpdateDraw(func() {
-					mapMutex.Lock()
-					defer mapMutex.Unlock()
-					table.RemoveRow(row)
-					delete(containerMap, container.ID)
-				})
 				return
 			}
 
@@ -264,7 +247,7 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 			})
 		}(container, currentRow)
 
-		currentRow++ // Increment the row count only for "valid" containers
+		currentRow++
 	}
 }
 
