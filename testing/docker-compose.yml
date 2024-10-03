@@ -1,0 +1,20 @@
+services:
+  container_1:
+    build: .
+    environment:
+      - NUM_OF_LOGS=100
+
+  container_2:
+    build: .
+    environment:
+      - NUM_OF_LOGS=1000
+
+  container_3:
+    build: .
+    environment:
+      - NUM_OF_LOGS=10000
+
+  container_4:
+    build: .
+    environment:
+      - NUM_OF_LOGS=100000

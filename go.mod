@@ -5,12 +5,16 @@ go 1.22.0
 require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/docker/docker v27.3.1+incompatible
-	github.com/rivo/tview v0.0.0-20240818110301-fd649dbf1223
+	github.com/rivo/tview v0.0.0-20240921122403-a64fc48d7654
 )
 
 require github.com/gdamore/tcell/v2 v2.7.4
 
-require github.com/gdamore/tcell v1.4.0
+require (
+	github.com/kr/pretty v0.3.1 // indirect
+	github.com/rogpeppe/go-internal v1.12.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
+)
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
