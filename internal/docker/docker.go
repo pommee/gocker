@@ -239,7 +239,9 @@ func calculateMemoryUsageMb(stats *types.StatsJSON) float64 {
 }
 
 func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *tview.Application, textView *tview.TextView) {
+	start := time.Now()
 	initialLogs, err := dc.fetchContainerLogs(id, false, "")
+	log.Println("Fetching initial logs took:", time.Since(start))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching container logs: %v\n", err)
 		return
@@ -247,7 +249,7 @@ func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *t
 
 	const (
 		chunkSize    = 60_000
-		maxDisplayed = 500_000
+		maxDisplayed = 10_000
 	)
 
 	type processedChunk struct {
@@ -255,7 +257,7 @@ func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *t
 		data  string
 	}
 
-	start := time.Now()
+	start = time.Now()
 	numChunks := (len(initialLogs) + chunkSize - 1) / chunkSize
 	chunkChan := make(chan processedChunk, numChunks)
 	chunks := make([]processedChunk, numChunks)

@@ -97,7 +97,6 @@ func startDockerEventListener(ctx context.Context, eventChan chan events.Message
 
 func handleContainerSelection(row int, containers []types.Container, cancel context.CancelFunc, table *tview.Table) {
 	var containerID string
-	log.Println(row)
 
 	if showOnlyRunning {
 		var runningContainers []types.Container

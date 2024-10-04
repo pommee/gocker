@@ -11,6 +11,8 @@ import (
 )
 
 func DrawLogs(table *tview.Table, containerID string) {
+	var scrollSpeed = 3
+
 	textView := createTextView()
 	inputField := createInputField(table, textView, containerID)
 	footer := CreateFooterLogs()
@@ -40,6 +42,22 @@ func DrawLogs(table *tview.Table, containerID string) {
 			cancel()
 			DrawHome()
 			return nil
+		case tcell.KeyUp:
+			yOffset, xOffset := textView.GetScrollOffset()
+			textView.ScrollTo(yOffset-scrollSpeed, xOffset)
+			return nil
+		case tcell.KeyDown:
+			yOffset, xOffset := textView.GetScrollOffset()
+			textView.ScrollTo(yOffset+scrollSpeed, xOffset)
+			return nil
+		case tcell.KeyPgUp:
+			yOffset, xOffset := textView.GetScrollOffset()
+			textView.ScrollTo(yOffset-scrollSpeed*3, xOffset)
+			return nil
+		case tcell.KeyPgDn:
+			yOffset, xOffset := textView.GetScrollOffset()
+			textView.ScrollTo(yOffset+scrollSpeed*3, xOffset)
+			return nil
 		}
 
 		switch event.Rune() {
@@ -63,6 +81,19 @@ func DrawLogs(table *tview.Table, containerID string) {
 		}
 
 		return event
+	})
+	textView.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		switch action {
+		case tview.MouseScrollUp:
+			yOffset, xOffset := textView.GetScrollOffset()
+			textView.ScrollTo(yOffset-scrollSpeed, xOffset)
+			return action, event
+		case tview.MouseScrollDown:
+			yOffset, xOffset := textView.GetScrollOffset()
+			textView.ScrollTo(yOffset+scrollSpeed, xOffset)
+			return action, event
+		}
+		return action, event
 	})
 
 	app.SetRoot(flex, true).SetFocus(textView)
