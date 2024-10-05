@@ -239,9 +239,7 @@ func calculateMemoryUsageMb(stats *types.StatsJSON) float64 {
 }
 
 func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *tview.Application, textView *tview.TextView, scrollOnNewLogEntry *bool) {
-	start := time.Now()
 	initialLogs, err := dc.fetchContainerLogs(id, false, "")
-	log.Println("Fetching initial logs took:", time.Since(start))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching container logs: %v\n", err)
 		return
@@ -257,7 +255,6 @@ func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *t
 		data  string
 	}
 
-	start = time.Now()
 	numChunks := (len(initialLogs) + chunkSize - 1) / chunkSize
 	chunkChan := make(chan processedChunk, numChunks)
 	chunks := make([]processedChunk, numChunks)
@@ -308,8 +305,6 @@ func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *t
 		fmt.Fprint(tview.ANSIWriter(textView), lastLogs)
 		textView.ScrollToEnd()
 	})
-
-	log.Println("Processing log lines took:", time.Since(start))
 
 	liveLogs, err := dc.startLogStream(id)
 	if err != nil {
@@ -386,7 +381,6 @@ func (dc *DockerWrapper) streamLogs(ctx context.Context, out io.ReadCloser, app 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Context canceled, stopping log stream.")
 			return
 		default:
 			_, err := io.ReadFull(out, header)

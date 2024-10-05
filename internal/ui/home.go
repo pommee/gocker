@@ -115,8 +115,6 @@ func handleContainerSelection(row int, containers []types.Container, cancel cont
 }
 
 func handleDockerEvent(event events.Message, table *tview.Table) {
-	log.Printf("[event] Action: %s, ID: %s, Status: %s", event.Action, event.ID, event.Status)
-
 	app.QueueUpdateDraw(func() {
 		switch event.Action {
 		case "start", "stop":

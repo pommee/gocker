@@ -2,10 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -36,7 +34,6 @@ func (ls *LogSearcher) searchWorker() {
 }
 
 func (ls *LogSearcher) search(keyword string) {
-	start := time.Now()
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
 
@@ -83,7 +80,6 @@ func (ls *LogSearcher) search(keyword string) {
 		}
 	})
 
-	log.Printf("Search took: %v\n", time.Since(start))
 }
 
 func (ls *LogSearcher) CreateInputField(table *tview.Table, containerID string) *tview.InputField {
@@ -126,8 +122,6 @@ func (ls *LogSearcher) navigateResults(direction int) {
 func (ls *LogSearcher) highlightMatch() {
 	regionID := ls.matches[ls.index]
 	ls.textView.Highlight(regionID).ScrollToHighlight()
-	searchResult := fmt.Sprintf(" Result %d/%d ", len(ls.matches)-ls.index, len(ls.matches))
-	log.Println(searchResult)
 }
 
 func (ls *LogSearcher) Cleanup() {
