@@ -198,7 +198,12 @@ func showStopConfirmation(table *tview.Table) {
 	buttons := createButtonLayout(btnYes, btnCancel)
 	helpBox := createHelpBox(confirmation, buttons)
 	modal := createCenteredModal(helpBox, 60, 10)
-
+	helpBox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			pages.RemovePage("modal")
+		}
+		return event
+	})
 	pages = tview.NewPages().
 		AddPage("main", flex, true, true).
 		AddPage("modal", modal, true, true)
@@ -245,7 +250,12 @@ func showRemoveConfirmation(table *tview.Table) {
 	buttons := createButtonLayout(btnYes, btnCancel)
 	helpBox := createHelpBox(confirmation, buttons)
 	modal := createCenteredModal(helpBox, 60, 10)
-
+	helpBox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			pages.RemovePage("modal")
+		}
+		return event
+	})
 	pages = tview.NewPages().
 		AddPage("main", flex, true, true).
 		AddPage("modal", modal, true, true)
@@ -298,7 +308,12 @@ func showStartContainerConfirmation(table *tview.Table) {
 	buttons := createButtonLayout(btnYes, btnCancel)
 	helpBox := createHelpBox(confirmation, buttons)
 	modal := createCenteredModal(helpBox, 60, 10)
-
+	helpBox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			pages.RemovePage("modal")
+		}
+		return event
+	})
 	pages = tview.NewPages().
 		AddPage("main", flex, true, true).
 		AddPage("modal", modal, true, true)
