@@ -15,12 +15,13 @@ import (
 )
 
 var (
-	app             *tview.Application
-	dockerClient    = docker.DockerWrapper{}
-	containerMap    = make(map[string]int)
-	mapMutex        sync.Mutex // Mutex for synchronizing access to containerMap
-	theme           = config.LoadTheme()
-	showOnlyRunning bool
+	app              *tview.Application
+	dockerClient     = docker.DockerWrapper{}
+	containerMap     = make(map[string]int)
+	mapMutex         sync.Mutex // Mutex for synchronizing access to containerMap
+	theme            = config.LoadTheme()
+	showOnlyRunning  bool
+	ScrollOnLogEntry bool
 )
 
 func Start() {
@@ -30,14 +31,10 @@ func Start() {
 }
 
 func DrawHome() {
-	app.EnableMouse(true)
-	containerList := createContainerList()
-	footer := CreateFooterHome()
-
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(CreateHelper(), 4, 1, false).
-		AddItem(containerList, 0, 1, true).
-		AddItem(footer, 1, 1, true)
+		AddItem(createContainerList(), 0, 1, true).
+		AddItem(CreateFooterHome(), 1, 1, true)
 
 	if err := app.SetRoot(flex, true).SetFocus(flex).Run(); err != nil {
 		panic(err)

@@ -14,7 +14,8 @@ func DrawLogs(table *tview.Table, containerID string) {
 	var scrollSpeed = 3
 
 	textView := createTextView()
-	inputField := createInputField(table, textView, containerID)
+	logSearcher := NewLogSearcher(textView)
+	inputField := logSearcher.CreateInputField(table, containerID)
 	footer := CreateFooterLogs()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -39,6 +40,7 @@ func DrawLogs(table *tview.Table, containerID string) {
 				AddItem(footer, 1, 1, false)
 			app.SetFocus(inputField)
 		case tcell.KeyEscape:
+			logSearcher.Cleanup()
 			cancel()
 			DrawHome()
 			return nil
@@ -97,6 +99,14 @@ func DrawLogs(table *tview.Table, containerID string) {
 	})
 
 	app.SetRoot(flex, true).SetFocus(textView)
+}
+
+func createTextView() *tview.TextView {
+	textView := tview.NewTextView().SetDynamicColors(true).SetRegions(true).SetChangedFunc(func() {
+		app.Draw()
+	})
+
+	return textView
 }
 
 func getAttributes(containerID string) string {
@@ -163,108 +173,4 @@ func walkAndHighlight(data interface{}, builder *strings.Builder, indentLevel in
 	}
 
 	return nil
-}
-
-func createTextView() *tview.TextView {
-	textView := tview.NewTextView().SetDynamicColors(true).SetRegions(true).SetChangedFunc(func() {
-		app.Draw()
-	})
-
-	return textView
-}
-
-func createInputField(table *tview.Table, textView *tview.TextView, containerID string) *tview.InputField {
-	inputField := tview.NewInputField()
-	inputField.SetFieldTextColor(tcell.ColorWhite)
-	inputField.SetPlaceholderTextColor(tcell.ColorLightGray)
-	inputField.SetPlaceholder("Logs...")
-
-	var currentMatchIndex int
-	var matchingRegions []string
-
-	inputField.SetChangedFunc(func(text string) {
-		keyword := inputField.GetText()
-
-		if keyword != "" {
-			matchingRegions = searchLogs(textView, keyword)
-			currentMatchIndex = len(matchingRegions) - 1
-
-			if len(matchingRegions) > 0 {
-				displayIndex := currentMatchIndex + 1
-				regionID := matchingRegions[currentMatchIndex]
-				textView.Highlight(regionID).ScrollToHighlight()
-				textView.SetTitle(fmt.Sprintf(" Result %d/%d ", displayIndex, len(matchingRegions)))
-			} else {
-				textView.Highlight("")
-				textView.SetTitle(" No matches found ")
-			}
-		} else {
-			textView.Highlight("")
-			textView.SetTitle(" Logs ")
-		}
-	})
-
-	inputField.SetDoneFunc(func(key tcell.Key) {
-		switch key {
-		case tcell.KeyEnter:
-			if len(matchingRegions) > 0 {
-				currentMatchIndex = (currentMatchIndex - 1 + len(matchingRegions)) % len(matchingRegions)
-				regionID := matchingRegions[currentMatchIndex]
-				textView.Highlight(regionID).ScrollToHighlight()
-
-				displayIndex := len(matchingRegions) - currentMatchIndex
-				textView.SetTitle(fmt.Sprintf(" Result %d/%d ", displayIndex, len(matchingRegions)))
-			}
-
-		case tcell.KeyEscape:
-			DrawLogs(table, containerID)
-		}
-	})
-
-	return inputField
-}
-
-func searchLogs(textView *tview.TextView, keyword string) []string {
-	text := textView.GetText(true)
-	lines := strings.Split(text, "\n")
-
-	var matchingRegions []string
-	var highlightedText strings.Builder
-	lowerKeyword := strings.ToLower(keyword)
-
-	for index, line := range lines {
-		lowerLine := strings.ToLower(line)
-		if strings.Contains(lowerLine, lowerKeyword) {
-			regionID := fmt.Sprintf("match%d", index)
-			highlightedLine := highlightAllMatches(line, lowerLine, lowerKeyword)
-			highlightedText.WriteString(fmt.Sprintf(`["%s"]%s[""]`, regionID, highlightedLine))
-			matchingRegions = append(matchingRegions, regionID)
-		} else {
-			highlightedText.WriteString(fmt.Sprintf("[gray:black]%s\n", line))
-		}
-	}
-
-	textView.SetText(highlightedText.String())
-	return matchingRegions
-}
-
-func highlightAllMatches(line, lowerLine, lowerKeyword string) string {
-	var highlightedLine strings.Builder
-	start := 0
-	keywordLen := len(lowerKeyword)
-
-	for {
-		startIndex := strings.Index(lowerLine[start:], lowerKeyword)
-		if startIndex == -1 {
-			highlightedLine.WriteString(line[start:])
-			break
-		}
-
-		highlightedLine.WriteString(line[start : start+startIndex])
-		highlightedLine.WriteString(fmt.Sprintf("[orange:black]%s[white:black]", line[start+startIndex:start+startIndex+keywordLen]))
-		start += startIndex + keywordLen
-	}
-
-	highlightedLine.WriteString("\n")
-	return highlightedLine.String()
 }
