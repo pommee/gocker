@@ -6,6 +6,7 @@ import (
 	"log"
 	"main/internal/config"
 	"main/internal/docker"
+	"strings"
 	"sync"
 
 	"github.com/docker/docker/api/types"
@@ -249,7 +250,7 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 
 func updateContainerRow(table *tview.Table, row int, containerInfo *docker.ContainerInfo) {
 	table.SetCell(row, 0, tview.NewTableCell(containerInfo.ID))
-	table.SetCell(row, 1, tview.NewTableCell(containerInfo.Name))
+	table.SetCell(row, 1, tview.NewTableCell(strings.TrimPrefix(containerInfo.Name, "/")))
 	table.SetCell(row, 2, tview.NewTableCell(containerInfo.Image))
 	table.SetCell(row, 3, tview.NewTableCell(containerInfo.Uptime.String()))
 	table.SetCell(row, 4, tview.NewTableCell(containerInfo.State))
