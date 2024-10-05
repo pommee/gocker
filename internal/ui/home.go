@@ -209,7 +209,7 @@ func showRemoveConfirmation(table *tview.Table) {
 	row, _ := table.GetSelection()
 	containerID := table.GetCell(row, 0).Text
 
-	showConfirmationModal("REMOVE", containerID, "This will force delete the container!", func() {
+	showConfirmationModal("REMOVE", containerID, "This will delete the container!", func() {
 		err := dockerClient.RemoveContainer(containerID)
 		if err != nil {
 			NotificationError(err)
