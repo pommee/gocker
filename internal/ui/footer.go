@@ -1,34 +1,48 @@
 package ui
 
 import (
+	"strconv"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
-func CreateFooterHome() *tview.TextView {
+type Footer struct {
+	TextView *tview.TextView
+}
 
-	footer := tview.NewTextView().SetDynamicColors(true)
-	footer.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
-	footer.SetText(
+func NewFooter() *Footer {
+	return &Footer{
+		TextView: tview.NewTextView().SetDynamicColors(true),
+	}
+}
+
+func CreateFooterHome() *Footer {
+	f := NewFooter()
+	f.TextView.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
+	f.TextView.SetText(
 		createSection("?", "help") +
 			createSection("ESC", "quit") +
 			createSection("1", "running") +
 			createSection("2", "all"),
 	)
-	return footer
+	return f
 }
 
-func CreateFooterLogs() *tview.TextView {
-	footer := tview.NewTextView().SetDynamicColors(true)
-	footer.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
-	footer.SetText(
-		createSection("ESC", "back") +
-			createSection("ENTER", "search") +
-			createSection("A", "attributes") +
-			createSection("E", "environment") +
-			createSection("V", "shell"),
-	)
-	return footer
+func CreateFooterLogs() *Footer {
+	f := NewFooter()
+	f.TextView.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
+	f.TextView.SetText(logsFooterText())
+	return f
+}
+
+func logsFooterText() string {
+	return createSection("?", "help") +
+		createSection("Scroll", strconv.FormatBool(ScrollOnNewLogEntry))
+}
+
+func (footer *Footer) updateLogsFooter() {
+	footer.TextView.SetText(logsFooterText())
 }
 
 func createSection(hint string, text string) string {

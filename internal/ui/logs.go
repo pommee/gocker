@@ -19,13 +19,29 @@ func DrawLogs(table *tview.Table, containerID string) {
 	footer := CreateFooterLogs()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go dockerClient.ListenForNewLogs(ctx, containerID, app, textView)
+	go dockerClient.ListenForNewLogs(ctx, containerID, app, textView, &ScrollOnNewLogEntry)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(textView, 0, 1, false).
-		AddItem(footer, 1, 1, false)
+		AddItem(footer.TextView, 1, 1, false)
 
 	var isShellMode bool
+
+	modal := func(p tview.Primitive, width, height int) tview.Primitive {
+		return tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(p, height, 1, true).
+				AddItem(nil, 0, 1, false), width, 1, true).
+			AddItem(nil, 0, 1, false)
+	}
+
+	helpBox := tview.NewFlex().
+		AddItem(helpText(), 0, 1, false)
+	helpBox.SetBorder(true)
+	helpBox.SetTitle("  Help - Press [orange:-:b]ESC[white:-:B] to exit  ")
+	helpBox.SetTitleAlign(tview.AlignCenter)
 
 	textView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if isShellMode {
@@ -37,7 +53,7 @@ func DrawLogs(table *tview.Table, containerID string) {
 			flex.Clear()
 			flex.AddItem(inputField, 1, 0, false).
 				AddItem(textView, 0, 1, false).
-				AddItem(footer, 1, 1, false)
+				AddItem(footer.TextView, 1, 1, false)
 			app.SetFocus(inputField)
 		case tcell.KeyEscape:
 			logSearcher.Cleanup()
@@ -80,10 +96,29 @@ func DrawLogs(table *tview.Table, containerID string) {
 			} else {
 				isShellMode = true
 			}
+		case 's':
+			ScrollOnNewLogEntry = !ScrollOnNewLogEntry
+			footer.updateLogsFooter()
+		case '?':
+			helpModal := modal(helpBox, 120, 30)
+			pages := tview.NewPages().
+				AddPage("main", flex, true, true).
+				AddPage("modal", helpModal, true, true)
+			pages.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+				if event.Key() == tcell.KeyEsc {
+					pages.RemovePage("modal")
+					app.SetRoot(flex, true).SetFocus(textView)
+					return nil
+				}
+				return event
+			})
+			app.SetRoot(pages, true)
+			return nil
 		}
 
 		return event
 	})
+
 	textView.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		switch action {
 		case tview.MouseScrollUp:
@@ -173,4 +208,26 @@ func walkAndHighlight(data interface{}, builder *strings.Builder, indentLevel in
 	}
 
 	return nil
+}
+
+func helpText() *tview.TextView {
+	return tview.NewTextView().SetDynamicColors(true).
+		SetText(`
+	[orange:-:b]Navigation[white:-:B] 
+	  Arrow keys
+	  J / K
+	  Mouse scroll
+	  PageUp / PageDown
+		
+	[orange:-:b]Shortcuts[white:-:B] 
+	  [blue:-:b]ESC[white:-:B]   Back
+	  [blue:-:b]ENTER[white:-:B] Search
+	  [blue:-:b]A[white:-:B]	    Attributes
+	  [blue:-:b]E[white:-:B]     Environment
+	  [blue:-:b]V[white:-:B]     Shell
+
+	[orange:-:b]Modes[white:-:B] 
+	  [blue:-:b]S[white:-:B]   Toggle scrolling when new log entry is added.
+	`,
+		)
 }

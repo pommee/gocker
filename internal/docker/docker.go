@@ -238,7 +238,7 @@ func calculateMemoryUsageMb(stats *types.StatsJSON) float64 {
 	return float64(stats.MemoryStats.Usage) / float64(1024*1024)
 }
 
-func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *tview.Application, textView *tview.TextView) {
+func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *tview.Application, textView *tview.TextView, scrollOnNewLogEntry *bool) {
 	start := time.Now()
 	initialLogs, err := dc.fetchContainerLogs(id, false, "")
 	log.Println("Fetching initial logs took:", time.Since(start))
@@ -318,7 +318,7 @@ func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *t
 	}
 	defer liveLogs.Close()
 
-	dc.streamLogs(ctx, liveLogs, app, textView)
+	dc.streamLogs(ctx, liveLogs, app, textView, scrollOnNewLogEntry)
 }
 
 func getLastNLines(s string, n int) string {
@@ -381,7 +381,7 @@ func (dc *DockerWrapper) startLogStream(id string) (io.ReadCloser, error) {
 	return out, nil
 }
 
-func (dc *DockerWrapper) streamLogs(ctx context.Context, out io.ReadCloser, app *tview.Application, textView *tview.TextView) {
+func (dc *DockerWrapper) streamLogs(ctx context.Context, out io.ReadCloser, app *tview.Application, textView *tview.TextView, scrollOnNewLogEntry *bool) {
 	header := make([]byte, 8)
 	for {
 		select {
@@ -407,7 +407,9 @@ func (dc *DockerWrapper) streamLogs(ctx context.Context, out io.ReadCloser, app 
 			highlightedLog := dc.highlightLogs(string(logMessage))
 			app.QueueUpdateDraw(func() {
 				fmt.Fprint(tview.ANSIWriter(textView), highlightedLog)
-				textView.ScrollToEnd()
+				if *scrollOnNewLogEntry {
+					textView.ScrollToEnd()
+				}
 			})
 		}
 	}
