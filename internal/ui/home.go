@@ -7,7 +7,6 @@ import (
 	"main/internal/config"
 	"main/internal/docker"
 	"sync"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/events"
@@ -25,20 +24,6 @@ var (
 	ScrollOnNewLogEntry bool
 	flex                *tview.Flex
 	notificationView    *tview.TextView
-)
-
-type NotificationType int
-
-type Notification struct {
-	message          string
-	notificationType NotificationType
-	duration         int
-}
-
-const (
-	SUCCESS NotificationType = iota
-	INFO
-	WARNING
 )
 
 func Start() {
@@ -174,21 +159,16 @@ func handleInput(event *tcell.EventKey, table *tview.Table) *tcell.EventKey {
 	return event
 }
 
-func showStopConfirmation(table *tview.Table) {
-	row, _ := table.GetSelection()
-	selectedContainerID := table.GetCell(row, 0).Text
+func showConfirmationModal(action, containerID, message string, onConfirm func(), width, height int) {
 	var pages *tview.Pages
 
-	confirmation := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).
-		SetText(fmt.Sprintf("\nAre you sure you want to [red:-:b]STOP[-:-:B] %s?", selectedContainerID))
+	confirmation := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter).
+		SetText(fmt.Sprintf("\nAre you sure you want to [red:-:b]%s[-:-:B] %s?\n%s", action, containerID, message))
 
 	btnYes := tview.NewButton("Yes").SetSelectedFunc(func() {
-		go dockerClient.StopContainer(selectedContainerID)
-		ShowNotification(Notification{
-			message:          fmt.Sprintf("Stopping %s", selectedContainerID),
-			notificationType: SUCCESS,
-			duration:         3,
-		})
+		go onConfirm()
 		pages.RemovePage("modal")
 	})
 	btnCancel := tview.NewButton("Cancel").SetSelectedFunc(func() {
@@ -197,168 +177,66 @@ func showStopConfirmation(table *tview.Table) {
 
 	buttons := createButtonLayout(btnYes, btnCancel)
 	helpBox := createHelpBox(confirmation, buttons)
-	modal := createCenteredModal(helpBox, 60, 10)
+	modal := createCenteredModal(helpBox, width, height)
+
 	helpBox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc {
 			pages.RemovePage("modal")
 		}
 		return event
 	})
+
 	pages = tview.NewPages().
 		AddPage("main", flex, true, true).
 		AddPage("modal", modal, true, true)
+
 	app.SetRoot(pages, true).SetFocus(btnYes)
 
 	setupButtonNavigation(btnYes, btnCancel)
+}
+
+func showStopConfirmation(table *tview.Table) {
+	row, _ := table.GetSelection()
+	containerID := table.GetCell(row, 0).Text
+
+	showConfirmationModal("STOP", containerID, "", func() {
+		dockerClient.StopContainer(containerID)
+		NotificationSuccess(fmt.Sprintf("Stopping %s", containerID))
+	}, 60, 10)
 }
 
 func showRemoveConfirmation(table *tview.Table) {
 	row, _ := table.GetSelection()
-	selectedContainerID := table.GetCell(row, 0).Text
-	var pages *tview.Pages
+	containerID := table.GetCell(row, 0).Text
 
-	confirmation := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).
-		SetText(fmt.Sprintf(
-			"\nAre you sure you want to [red:-:b]REMOVE[-:-:B] %s?\n"+
-				"This will force delete the container!",
-			selectedContainerID,
-		))
-
-	btnYes := tview.NewButton("Yes").SetSelectedFunc(func() {
-		go func() {
-			err := dockerClient.RemoveContainer(selectedContainerID)
-			if err != nil {
-				ShowNotification(Notification{
-					message:          err.Error(),
-					notificationType: WARNING,
-					duration:         5,
-				})
-			} else {
-				ShowNotification(Notification{
-					message:          fmt.Sprintf("Removing %s", selectedContainerID),
-					notificationType: SUCCESS,
-					duration:         3,
-				})
-			}
-		}()
-		pages.RemovePage("modal")
-	})
-	btnCancel := tview.NewButton("Cancel").SetSelectedFunc(func() {
-		pages.RemovePage("modal")
-	})
-
-	buttons := createButtonLayout(btnYes, btnCancel)
-	helpBox := createHelpBox(confirmation, buttons)
-	modal := createCenteredModal(helpBox, 60, 10)
-	helpBox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEsc {
-			pages.RemovePage("modal")
+	showConfirmationModal("REMOVE", containerID, "This will force delete the container!", func() {
+		err := dockerClient.RemoveContainer(containerID)
+		if err != nil {
+			NotificationError(err)
+		} else {
+			NotificationSuccess(fmt.Sprintf("Removing %s", containerID))
 		}
-		return event
-	})
-	pages = tview.NewPages().
-		AddPage("main", flex, true, true).
-		AddPage("modal", modal, true, true)
-	app.SetRoot(pages, true).SetFocus(btnYes)
-
-	setupButtonNavigation(btnYes, btnCancel)
+	}, 60, 10)
 }
 
 func showStartContainerConfirmation(table *tview.Table) {
 	row, _ := table.GetSelection()
-	selectedContainerID := table.GetCell(row, 0).Text
-	container, _ := dockerClient.GetContainerInfo(selectedContainerID)
-	var pages *tview.Pages
+	containerID := table.GetCell(row, 0).Text
+	container, _ := dockerClient.GetContainerInfo(containerID)
 
 	if container.State == "running" {
-		ShowNotification(Notification{
-			message:          fmt.Sprintf("%s is already running", container.Name),
-			notificationType: INFO,
-			duration:         3,
-		})
+		NotificationInfo(fmt.Sprintf("%s is already running", container.Name))
 		return
 	}
 
-	confirmation := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).
-		SetText(fmt.Sprintf("\nAre you sure you want to [red:-:b]START[-:-:B] %s?", selectedContainerID))
-
-	btnYes := tview.NewButton("Yes").SetSelectedFunc(func() {
-		go func() {
-			err := dockerClient.StartContainer(selectedContainerID)
-			if err != nil {
-				ShowNotification(Notification{
-					message:          err.Error(),
-					notificationType: WARNING,
-					duration:         5,
-				})
-			} else {
-				ShowNotification(Notification{
-					message:          fmt.Sprintf("Starting %s", container.Name),
-					notificationType: SUCCESS,
-					duration:         3,
-				})
-			}
-		}()
-		pages.RemovePage("modal")
-	})
-	btnCancel := tview.NewButton("Cancel").SetSelectedFunc(func() {
-		pages.RemovePage("modal")
-	})
-
-	buttons := createButtonLayout(btnYes, btnCancel)
-	helpBox := createHelpBox(confirmation, buttons)
-	modal := createCenteredModal(helpBox, 60, 10)
-	helpBox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEsc {
-			pages.RemovePage("modal")
+	showConfirmationModal("START", containerID, "", func() {
+		err := dockerClient.StartContainer(containerID)
+		if err != nil {
+			NotificationError(err)
+		} else {
+			NotificationSuccess(fmt.Sprintf("Starting %s", container.Name))
 		}
-		return event
-	})
-	pages = tview.NewPages().
-		AddPage("main", flex, true, true).
-		AddPage("modal", modal, true, true)
-	app.SetRoot(pages, true).SetFocus(btnYes)
-
-	setupButtonNavigation(btnYes, btnCancel)
-}
-
-func createNotification() *tview.TextView {
-	notificationView = tview.NewTextView().
-		SetTextAlign(tview.AlignCenter).
-		SetTextColor(tview.Styles.PrimaryTextColor)
-	return notificationView
-}
-
-func ShowNotification(notification Notification) {
-	notificationView.SetBorder(true)
-	notificationView.SetBorderColor(getNotificationColor(notification.notificationType))
-	notificationView.SetText(notification.message)
-
-	go func() {
-		app.Draw()
-		time.AfterFunc(time.Second*time.Duration(notification.duration), func() {
-			clearNotification()
-		})
-	}()
-}
-
-func getNotificationColor(notificationType NotificationType) tcell.Color {
-	switch notificationType {
-	case SUCCESS:
-		return tcell.ColorGreen
-	case INFO:
-		return tcell.ColorBlue
-	case WARNING:
-		return tcell.ColorDarkRed
-	default:
-		return tcell.ColorWhite
-	}
-}
-
-func clearNotification() {
-	notificationView.SetText("")
-	notificationView.SetBorder(false)
-	app.Draw()
+	}, 60, 10)
 }
 
 func createButtonLayout(btnYes, btnCancel *tview.Button) *tview.Flex {
