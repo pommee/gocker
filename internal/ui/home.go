@@ -348,7 +348,7 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 
 	headers := []string{"ID", "Container", "Image", "Uptime", "Status", "CPU / MEM"}
 	for i, header := range headers {
-		table.SetCell(0, i, tview.NewTableCell(header).
+		table.SetCell(0, i, tview.NewTableCell(fmt.Sprintf("[-:-:b]%s[-:-:B]", header)).
 			SetTextColor(tcell.GetColor(theme.Table.Headers)).
 			SetExpansion(1).
 			SetSelectable(false))
@@ -381,10 +381,19 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 }
 
 func updateContainerRow(table *tview.Table, row int, containerInfo *docker.ContainerInfo) {
+	var status string
+
+	switch containerInfo.State {
+	case "running":
+		status = fmt.Sprintf("[green:black]%s[white:black]", containerInfo.State)
+	case "exited":
+		status = fmt.Sprintf("[gray:black]%s[white:black]", containerInfo.State)
+	}
+
 	table.SetCell(row, 0, tview.NewTableCell(containerInfo.ID))
 	table.SetCell(row, 1, tview.NewTableCell(containerInfo.Name))
 	table.SetCell(row, 2, tview.NewTableCell(containerInfo.Image))
 	table.SetCell(row, 3, tview.NewTableCell(containerInfo.Uptime.String()))
-	table.SetCell(row, 4, tview.NewTableCell(containerInfo.State))
+	table.SetCell(row, 4, tview.NewTableCell(status))
 	table.SetCell(row, 5, tview.NewTableCell(fmt.Sprintf("%.2f%% / %.2f MB", containerInfo.CPUUsage, containerInfo.MemoryUsage)))
 }
