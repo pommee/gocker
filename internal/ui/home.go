@@ -23,6 +23,7 @@ var (
 	theme               = config.LoadTheme()
 	showOnlyRunning     bool
 	ScrollOnNewLogEntry bool
+	flex                *tview.Flex
 )
 
 func Start() {
@@ -32,7 +33,7 @@ func Start() {
 }
 
 func DrawHome() {
-	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+	flex = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(CreateHelper(), 4, 1, false).
 		AddItem(createContainerList(), 0, 1, true).
 		AddItem(CreateFooterHome().TextView, 1, 1, true)
@@ -131,26 +132,99 @@ func handleDockerEvent(event events.Message, table *tview.Table) {
 }
 
 func handleInput(event *tcell.EventKey, table *tview.Table) *tcell.EventKey {
-	switch event.Rune() {
-	case '?':
-		showHelpModal(table)
-		return nil
-	case '1':
-		if showOnlyRunning {
-			return nil
+	switch event.Key() {
+	case tcell.KeyCtrlD:
+		showDeleteConfirmation(table)
+	case tcell.KeyRune:
+		switch event.Rune() {
+		case '?':
+			showHelpModal(table)
+		case '1':
+			if !showOnlyRunning {
+				showOnlyRunning = true
+				updateFilteredContainers(table)
+			}
+		case '2':
+			if showOnlyRunning {
+				showOnlyRunning = false
+				updateFilteredContainers(table)
+			}
 		}
-		showOnlyRunning = true
-		updateFilteredContainers(table)
-		return nil
-	case '2':
-		if !showOnlyRunning {
-			return nil
-		}
-		showOnlyRunning = false
-		updateFilteredContainers(table)
-		return nil
 	}
 	return event
+}
+
+func showDeleteConfirmation(table *tview.Table) {
+	row, _ := table.GetSelection()
+	selectedContainerID := table.GetCell(row, 0).Text
+	var pages *tview.Pages
+
+	confirmation := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).
+		SetText(fmt.Sprintf("\nAre you sure you want to [red:-:b]DELETE[-:-:B] %s?", selectedContainerID))
+
+	btnYes := tview.NewButton("Yes").SetSelectedFunc(func() {
+		go dockerClient.StopContainer(selectedContainerID)
+		pages.RemovePage("modal")
+	})
+	btnCancel := tview.NewButton("Cancel").SetSelectedFunc(func() {
+		pages.RemovePage("modal")
+	})
+
+	buttons := createButtonLayout(btnYes, btnCancel)
+	helpBox := createHelpBox(confirmation, buttons)
+	modal := createCenteredModal(helpBox, 60, 10)
+
+	pages = tview.NewPages().
+		AddPage("main", flex, true, true).
+		AddPage("modal", modal, true, true)
+	app.SetRoot(pages, true).SetFocus(btnYes)
+
+	setupButtonNavigation(btnYes, btnCancel)
+}
+
+func createButtonLayout(btnYes, btnCancel *tview.Button) *tview.Flex {
+	return tview.NewFlex().
+		AddItem(btnYes, 0, 1, true).
+		AddItem(btnCancel, 0, 1, true)
+}
+
+func createHelpBox(confirmation, buttons tview.Primitive) *tview.Flex {
+	helpModal := tview.NewFlex().
+		AddItem(confirmation, 0, 2, false).
+		AddItem(buttons, 0, 1, true)
+	helpModal.SetDirection(tview.FlexRow)
+	helpModal.SetBorder(true)
+	helpModal.SetTitle("  Confirm - Press [orange:-:b]ESC[white:-:B] to exit  ")
+	helpModal.SetTitleAlign(tview.AlignCenter)
+	return helpModal
+}
+
+func createCenteredModal(p tview.Primitive, width, height int) tview.Primitive {
+	return tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(p, height, 1, true).
+			AddItem(nil, 0, 1, false), width, 1, true).
+		AddItem(nil, 0, 1, false)
+}
+
+func setupButtonNavigation(btnYes, btnCancel *tview.Button) {
+	btnYes.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyRight {
+			app.SetFocus(btnCancel)
+			return nil
+		}
+		return event
+	})
+
+	btnCancel.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyLeft {
+			app.SetFocus(btnYes)
+			return nil
+		}
+		return event
+	})
 }
 
 func showHelpModal(table *tview.Table) {
