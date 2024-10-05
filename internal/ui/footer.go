@@ -25,7 +25,9 @@ func CreateFooterHome() *Footer {
 			createSection("ESC", "quit") +
 			createSection("1", "running") +
 			createSection("2", "all") +
-			createSection("C-d", "Stop container"),
+			createSection("C-d", "Remove container") +
+			createSection("C-r", "Start container") +
+			createSection("C-s", "Stop container"),
 	)
 	return f
 }

@@ -216,7 +216,7 @@ func (dc *DockerWrapper) GetContainerInfo(id string) (*ContainerInfo, error) {
 
 	return &ContainerInfo{
 		ID:          container.ID[:12],
-		Name:        container.Name,
+		Name:        strings.TrimPrefix(container.Name, "/"),
 		CPUUsage:    cpuUsage,
 		MemoryUsage: memoryUsage,
 		State:       container.State.Status,
@@ -461,8 +461,12 @@ func (dc *DockerWrapper) UnpauseContainers(ids []string) {
 	}
 }
 
-func (dc *DockerWrapper) StartContainer(id string) {
-	dc.client.ContainerStart(context.Background(), id, container.StartOptions{})
+func (dc *DockerWrapper) StartContainer(id string) error {
+	err := dc.client.ContainerStart(context.Background(), id, container.StartOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (dc *DockerWrapper) StartContainers(ids []string) {
@@ -479,4 +483,12 @@ func (dc *DockerWrapper) StopContainers(ids []string) {
 	for _, id := range ids {
 		dc.StopContainer(id)
 	}
+}
+
+func (dc *DockerWrapper) RemoveContainer(id string) error {
+	err := dc.client.ContainerRemove(context.Background(), id, container.RemoveOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
 }
