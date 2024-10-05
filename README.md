@@ -28,7 +28,31 @@ The binary is placed in `~/.local/bin`. If the [installer.sh](https://github.com
 
 ## 🛠 Usage
 
-To start the application, simply run:
-```shell
-gocker
+### Starting the Application
+To launch the application, simply run the following command in your terminal:
+```console
+$ gocker
+```
+
+### Available Commands
+
+**Update**  
+To check for updates and apply them:
+
+```console
+$ gocker update
+```
+
+**Info**  
+To display version and build information:
+
+```console
+$ gocker info
+```
+
+**Help**  
+For detailed help about commands:
+
+```console
+$ gocker help
 ```
