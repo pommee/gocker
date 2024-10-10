@@ -20,7 +20,7 @@ var (
 	containerMap        = make(map[string]int)
 	mapMutex            sync.Mutex // Mutex for synchronizing access to containerMap
 	theme               = config.LoadTheme()
-	showOnlyRunning     bool
+	showOnlyRunning     = true
 	ScrollOnNewLogEntry bool
 	flex                *tview.Flex
 	notificationView    *tview.TextView
@@ -240,7 +240,7 @@ func showStartContainerConfirmation(table *tview.Table) {
 func createButtonLayout(btnYes, btnCancel *tview.Button) *tview.Flex {
 	return tview.NewFlex().
 		AddItem(btnYes, 0, 1, true).
-		AddItem(btnCancel, 0, 1, true)
+		AddItem(btnCancel, 0, 1, false)
 }
 
 func createHelpBox(confirmation, buttons tview.Primitive) *tview.Flex {
@@ -378,6 +378,7 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 
 		currentRow++
 	}
+	table.Select(0, 0)
 }
 
 func updateContainerRow(table *tview.Table, row int, containerInfo *docker.ContainerInfo) {
