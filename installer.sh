@@ -46,7 +46,7 @@ create_default_config() {
 
     echo "[4/5] Downloading config.yml to ${default_config_path}"
     mkdir -p "${config_dir}"
-    curl -L -o "${default_config_path}" "${default_config_path}"
+    curl -L -o "${default_config_path}" "${default_config_url}"
 }
 
 download_default_theme() {
@@ -68,7 +68,7 @@ main() {
     downloadFolder="${TMPDIR:-/tmp}"
     downloaded_file="${downloadFolder}/${file_name}"
 
-    echo "[1/3] Downloading ${file_name} to ${downloadFolder}"
+    echo "[1/5] Downloading ${file_name} to ${downloadFolder}"
     asset_path=$(curl -sL "https://api.github.com/repos/pommee/gocker/releases" |
         grep -o "https://github.com/pommee/gocker/releases/download/v${latest_version}/${file_name}" |
         head -n 1)
@@ -85,11 +85,11 @@ main() {
 
     mkdir -p "${executable_folder}"
 
-    echo "[2/3] Installing ${file_name} to ${executable_folder}"
+    echo "[2/5] Installing ${file_name} to ${executable_folder}"
     tar -xzf "${downloaded_file}" -C "${executable_folder}"
     chmod +x "${executable_folder}/gocker"
 
-    echo "[3/3] gocker was installed successfully to ${executable_folder}"
+    echo "[3/5] gocker was installed successfully to ${executable_folder}"
 
     create_default_config
     download_default_theme
