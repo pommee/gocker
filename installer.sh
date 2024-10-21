@@ -5,9 +5,15 @@ set -e
 target=""
 githubUrl=""
 executable_folder=$(eval echo "~/.local/bin")
-config_folder=$(eval echo "$HOME/.config/gocker/theming")
+
+theme_dir=$(eval echo "$HOME/.config/gocker/theming")
+config_dir=$(eval echo "$HOME/.config/gocker/config")
+
 default_theme_url="https://raw.githubusercontent.com/pommee/gocker/main/theming/default.yml"
-default_theme_path="${config_folder}/default.yml"
+default_config_url="https://raw.githubusercontent.com/pommee/gocker/main/config/config.yml"
+
+default_theme_path="${theme_dir}/default.yml"
+default_config_path="${theme_dir}/config.yml"
 
 get_arch() {
     case $(uname -m) in
@@ -31,14 +37,26 @@ get_latest_release() {
     sed -E 's/.*"v([^"]+)".*/\1/'
 }
 
-download_default_theme() {
-    if [ -f "${default_theme_path}" ]; then
-        # [4/4] The default.yml file already exists. Skipping download.
+
+create_default_config() {
+    if [ -f "${default_config_path}" ]; then
+        # [4/5] Config file already exists. Skipping download.
         return
     fi
 
-    echo "[4/4] Downloading default.yml to ${default_theme_path}"
-    mkdir -p "${config_folder}"
+    echo "[4/5] Downloading config.yml to ${default_config_path}"
+    mkdir -p "${config_dir}"
+    curl -L -o "${default_config_path}" "${default_config_path}"
+}
+
+download_default_theme() {
+    if [ -f "${default_theme_path}" ]; then
+        # [5/5] The default.yml file already exists. Skipping download.
+        return
+    fi
+
+    echo "[5/5] Downloading default.yml to ${default_theme_path}"
+    mkdir -p "${theme_dir}"
     curl -L -o "${default_theme_path}" "${default_theme_url}"
 }
 
@@ -73,6 +91,7 @@ main() {
 
     echo "[3/3] gocker was installed successfully to ${executable_folder}"
 
+    create_default_config
     download_default_theme
 
     echo "Manually add the directory to your \$HOME/.bash_profile (or similar):"

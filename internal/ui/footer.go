@@ -19,7 +19,7 @@ func NewFooter() *Footer {
 
 func CreateFooterHome() *Footer {
 	f := NewFooter()
-	f.TextView.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
+	f.TextView.SetBackgroundColor(tcell.GetColor(userTheme.Footer.Background))
 	f.TextView.SetText(
 		createSection("?", "help") +
 			createSection("ESC", "quit") +
@@ -34,7 +34,7 @@ func CreateFooterHome() *Footer {
 
 func CreateFooterLogs() *Footer {
 	f := NewFooter()
-	f.TextView.SetBackgroundColor(tcell.GetColor(theme.Footer.Background))
+	f.TextView.SetBackgroundColor(tcell.GetColor(userTheme.Footer.Background))
 	f.TextView.SetText(logsFooterText())
 	return f
 }
@@ -50,13 +50,13 @@ func (footer *Footer) updateLogsFooter() {
 
 func createSection(hint string, text string) string {
 	section := ("[" +
-		theme.Footer.Hint +
+		userTheme.Footer.Hint +
 		":" +
-		theme.Footer.Background +
+		userTheme.Footer.Background +
 		":b] " +
 		hint +
 		" [" +
-		theme.Footer.Text +
+		userTheme.Footer.Text +
 		":#24292f:B]" +
 		text + " ")
 	return section

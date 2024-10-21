@@ -19,7 +19,8 @@ var (
 	dockerClient        = docker.DockerWrapper{}
 	containerMap        = make(map[string]int)
 	mapMutex            sync.Mutex // Mutex for synchronizing access to containerMap
-	theme               = config.LoadTheme()
+	userTheme           = config.LoadTheme()
+	userConf            = config.LoadConfig()
 	showOnlyRunning     = true
 	ScrollOnNewLogEntry bool
 	flex                *tview.Flex
@@ -46,7 +47,7 @@ func DrawHome() {
 
 func createContainerList() *tview.Table {
 	table := setupContainerTable()
-	initialContainers := dockerClient.GetContainers(true)
+	initialContainers := dockerClient.GetContainers(userConf.OnlyRunningOnStartup)
 	updateTableWithContainers(table, initialContainers)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,13 +72,13 @@ func setupContainerTable() *tview.Table {
 	table := tview.NewTable().SetSelectable(true, false)
 	table.SetTitle("Containers")
 	table.SetBorderPadding(0, 0, 1, 1)
-	table.SetBackgroundColor(tcell.GetColor(theme.Table.Fg))
-	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.GetColor(theme.Table.Selected)))
+	table.SetBackgroundColor(tcell.GetColor(userTheme.Table.Fg))
+	table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.GetColor(userTheme.Table.Selected)))
 
 	headers := []string{"ID", "Container", "Image", "Uptime", "Status", "CPU / MEM"}
 	for i, header := range headers {
 		table.SetCell(0, i, tview.NewTableCell(header).
-			SetTextColor(tcell.GetColor(theme.Table.Headers)).
+			SetTextColor(tcell.GetColor(userTheme.Table.Headers)).
 			SetExpansion(1).
 			SetSelectable(false))
 	}
@@ -349,7 +350,7 @@ func updateTableWithContainers(table *tview.Table, containers []types.Container)
 	headers := []string{"ID", "Container", "Image", "Uptime", "Status", "CPU / MEM"}
 	for i, header := range headers {
 		table.SetCell(0, i, tview.NewTableCell(fmt.Sprintf("[-:-:b]%s[-:-:B]", header)).
-			SetTextColor(tcell.GetColor(theme.Table.Headers)).
+			SetTextColor(tcell.GetColor(userTheme.Table.Headers)).
 			SetExpansion(1).
 			SetSelectable(false))
 	}
