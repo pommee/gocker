@@ -33,7 +33,6 @@ type Theme struct {
 
 func LoadConfig() *Config {
 	data, err := os.ReadFile(configPath)
-	log.Println(data)
 	if err != nil {
 		log.Printf("error reading file: %v", err)
 	}
