@@ -13,7 +13,7 @@ default_theme_url="https://raw.githubusercontent.com/pommee/gocker/main/theming/
 default_config_url="https://raw.githubusercontent.com/pommee/gocker/main/config/config.yml"
 
 default_theme_path="${theme_dir}/default.yml"
-default_config_path="${theme_dir}/config.yml"
+default_config_path="${config_dir}/config.yml"
 
 get_arch() {
     case $(uname -m) in
