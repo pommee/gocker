@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Masterminds/semver"
@@ -20,6 +21,12 @@ var version, commit, date string
 
 type Release struct {
 	TagName string `json:"tag_name"`
+	Body    string `json:"body"`
+}
+
+type Change struct {
+	Message string
+	Commit  string
 }
 
 func logFatal(err error, msg string) {
@@ -88,11 +95,53 @@ func validateVersion() {
 }
 
 func info() {
+	changes := parseChanges()
+	for _, change := range changes {
+		fmt.Println(change)
+		clickableCommit(change.Commit, change.Message)
+	}
 	blue := color.New(color.FgHiBlue).Add(color.Bold)
 	blue.Printf("%-10s %s\n", "Version", version)
 	blue.Printf("%-10s %s\n", "Commit", commit)
 	blue.Printf("%-10s %s\n", "Date", date)
 	os.Exit(0)
+}
+
+func clickableCommit(hash string, message string) {
+	commitURL := "https://github.com/pommee/gocker/commit/" + hash
+	fmt.Printf("\033]8;;%s\033\\%s\033]8;;\033\\ %s\n", commitURL, hash, message)
+}
+
+func parseChanges() []Change {
+	resp, err := http.Get("https://api.github.com/repos/pommee/gocker/releases")
+	if err != nil {
+		log.Fatalf("Error fetching releases: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var releases []Release
+	var changes []Change
+
+	err = json.NewDecoder(resp.Body).Decode(&releases)
+	if err != nil {
+		log.Fatalf("Error parsing JSON: %v", err)
+	}
+
+	changeRegex := regexp.MustCompile(`(.+?) \((\w+)\)`)
+	re := regexp.MustCompile(`(?s)##.*?\n\n\*`)
+
+	for _, release := range releases {
+		body := re.ReplaceAllString(release.Body, "")
+		body = regexp.MustCompile(`\*`).ReplaceAllString(body, "")
+
+		changeMatches := changeRegex.FindAllStringSubmatch(body, -1)
+
+		for _, match := range changeMatches {
+			changes = append(changes, Change{Message: strings.TrimSpace(match[1]), Commit: strings.TrimSpace(match[2])})
+		}
+	}
+
+	return changes
 }
 
 func main() {
