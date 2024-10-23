@@ -13,7 +13,7 @@ func CreateHelper() *tview.TextView {
 
 	headerValues := map[string]string{
 		"ClientVersion": dockerClient.GetDockerVersion(),
-		"Containers":    strconv.Itoa(len(dockerClient.GetContainers(true))),
+		"Containers":    strconv.Itoa(len(dockerClient.GetContainers(showOnlyRunning))),
 		"Images":        strconv.Itoa(len(dockerClient.GetImages())),
 	}
 	keys := []string{"ClientVersion", "Containers", "Images"}

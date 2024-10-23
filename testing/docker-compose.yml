@@ -1,20 +1,32 @@
 services:
-  container_1:
-    build: .
-    environment:
-      - NUM_OF_LOGS=100
+  logger-1k:
+    image: alpine
+    command: >
+      sh -c '
+        seq 1 1000 | xargs -I {} echo "Container 1 - Log line {}" > /proc/1/fd/1;
+        tail -f /dev/null
+      '
 
-  container_2:
-    build: .
-    environment:
-      - NUM_OF_LOGS=1000
+  logger-5k:
+    image: alpine
+    command: >
+      sh -c '
+        seq 1 5000 | xargs -I {} echo "Container 2 - Log line {}" > /proc/1/fd/1;
+        tail -f /dev/null
+      '
 
-  container_3:
-    build: .
-    environment:
-      - NUM_OF_LOGS=10000
+  logger-20k:
+    image: alpine
+    command: >
+      sh -c '
+        seq 1 20000 | xargs -I {} echo "Container 3 - Log line {}" > /proc/1/fd/1;
+        tail -f /dev/null
+      '
 
-  container_4:
-    build: .
-    environment:
-      - NUM_OF_LOGS=100000
+  logger-10k:
+    image: alpine
+    command: >
+      sh -c '
+        seq 1 10000 | xargs -I {} echo "Container 4 - Log line {}" > /proc/1/fd/1;
+        tail -f /dev/null
+      '

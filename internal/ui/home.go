@@ -21,15 +21,16 @@ var (
 	mapMutex            sync.Mutex // Mutex for synchronizing access to containerMap
 	userTheme           = config.LoadTheme()
 	userConf            = config.LoadConfig()
-	showOnlyRunning     = true
+	showOnlyRunning     = userConf.OnlyRunningOnStartup
 	ScrollOnNewLogEntry bool
 	flex                *tview.Flex
 	notificationView    *tview.TextView
 )
 
 func Start() {
+	log.Println("AWD", showOnlyRunning)
 	app = tview.NewApplication()
-	dockerClient.NewClient()
+	dockerClient.NewClient(*userConf)
 	DrawHome()
 }
 
@@ -47,7 +48,7 @@ func DrawHome() {
 
 func createContainerList() *tview.Table {
 	table := setupContainerTable()
-	initialContainers := dockerClient.GetContainers(userConf.OnlyRunningOnStartup)
+	initialContainers := dockerClient.GetContainers(showOnlyRunning)
 	updateTableWithContainers(table, initialContainers)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -119,7 +120,7 @@ func handleDockerEvent(event events.Message, table *tview.Table) {
 	app.QueueUpdateDraw(func() {
 		switch event.Action {
 		case "start", "stop":
-			updateTableWithContainers(table, dockerClient.GetContainers(true))
+			updateTableWithContainers(table, dockerClient.GetContainers(showOnlyRunning))
 		case "destroy":
 			mapMutex.Lock()
 			defer mapMutex.Unlock()
@@ -324,7 +325,7 @@ func createHelpCell(key string, helpText string) *tview.TableCell {
 }
 
 func updateFilteredContainers(table *tview.Table) {
-	containers := dockerClient.GetContainers(true)
+	containers := dockerClient.GetContainers(showOnlyRunning)
 
 	var filteredContainers []types.Container
 	if showOnlyRunning {

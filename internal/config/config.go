@@ -15,7 +15,8 @@ var (
 )
 
 type Config struct {
-	OnlyRunningOnStartup bool `yaml:"onlyRunningOnStartup"`
+	OnlyRunningOnStartup bool   `yaml:"onlyRunningOnStartup"`
+	InitialAmountOfLogs  string `yaml:"initialAmountOfLogs"`
 }
 
 type Theme struct {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"main/internal/config"
 	"os"
 	"strings"
 	"sync"
@@ -46,13 +47,22 @@ type ContainerInfo struct {
 	Image       string
 }
 
-func (dc *DockerWrapper) NewClient() {
+type LogsSettings struct {
+	initialAmountOfLogs string
+}
+
+var logsSettings LogsSettings
+
+func (dc *DockerWrapper) NewClient(config config.Config) {
 	var err error
 	dc.client, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		panic(err.Error())
 	}
 	dc.IsClientCreated = true
+	logsSettings = LogsSettings{
+		initialAmountOfLogs: config.InitialAmountOfLogs,
+	}
 }
 
 func (dc *DockerWrapper) CloseClient() {
@@ -330,6 +340,7 @@ func (dc *DockerWrapper) fetchContainerLogs(id string, follow bool, since string
 		ShowStderr: true,
 		Follow:     follow,
 		Since:      since,
+		Tail:       logsSettings.initialAmountOfLogs,
 	}
 
 	out, err := dc.client.ContainerLogs(context.Background(), id, logOptions)
