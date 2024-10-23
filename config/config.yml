@@ -1,3 +1,7 @@
 
-config:
-  onlyRunningOnStartup: true
+# Will only show running containers upon startup
+onlyRunningOnStartup: true
+
+# Amount of logs to fetch when viewing a container
+## ! Must be a string !
+initialAmountOfLogs: "2000"
