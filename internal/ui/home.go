@@ -28,7 +28,6 @@ var (
 )
 
 func Start() {
-	log.Println("AWD", showOnlyRunning)
 	app = tview.NewApplication()
 	dockerClient.NewClient(*userConf)
 	DrawHome()

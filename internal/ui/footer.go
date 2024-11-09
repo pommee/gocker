@@ -41,6 +41,8 @@ func CreateFooterLogs() *Footer {
 
 func logsFooterText() string {
 	return createSection("?", "help") +
+		createSection("e", "environment") +
+		createSection("v", "shell") +
 		createSection("Scroll", strconv.FormatBool(ScrollOnNewLogEntry))
 }
 
