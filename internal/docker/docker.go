@@ -137,31 +137,39 @@ func (dc *DockerWrapper) ListenForEvents(ctx context.Context, eventChan chan<- e
 }
 
 func (dc *DockerWrapper) CreateContainerShell(ctx context.Context, containerID string, textView *tview.TextView) error {
-	execConfig := container.ExecOptions{
-		AttachStdin:  true,
-		AttachStdout: true,
-		AttachStderr: true,
-		Tty:          true,
-		Cmd:          []string{"/bin/bash"},
+	commands := []string{
+		"/bin/ash",
+		"/bin/bash",
 	}
 
-	resp, err := dc.client.ContainerExecCreate(ctx, containerID, execConfig)
+	var shell types.IDResponse
+	for _, command := range commands {
+		execConfig := container.ExecOptions{
+			AttachStdin:  true,
+			AttachStdout: true,
+			AttachStderr: true,
+			Tty:          true,
+			Cmd:          []string{command},
+		}
+		resp, err := dc.client.ContainerExecCreate(ctx, containerID, execConfig)
+		if err == nil {
+			shell = resp
+			break
+		}
+	}
+
+	attachResp, err := dc.client.ContainerExecAttach(ctx, shell.ID, container.ExecAttachOptions{Tty: true})
 	if err != nil {
 		return err
 	}
 
-	attachResp, err := dc.client.ContainerExecAttach(ctx, resp.ID, container.ExecAttachOptions{Tty: true})
-	if err != nil {
-		return err
-	}
-
-	err = dc.client.ContainerExecStart(ctx, resp.ID, container.ExecAttachOptions{Tty: true})
+	err = dc.client.ContainerExecStart(ctx, shell.ID, container.ExecAttachOptions{Tty: true})
 	if err != nil {
 		return err
 	}
 
 	inputReader, inputWriter := io.Pipe()
-	dc.updateTerminalSize(ctx, resp.ID)
+	dc.updateTerminalSize(ctx, shell.ID)
 
 	go func() {
 		io.Copy(tview.ANSIWriter(textView), attachResp.Reader)
