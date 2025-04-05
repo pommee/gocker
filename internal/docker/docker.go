@@ -10,7 +10,6 @@ import (
 	"main/internal/config"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/alecthomas/chroma/quick"
@@ -263,59 +262,9 @@ func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *t
 		return
 	}
 
-	const (
-		chunkSize    = 60_000
-		maxDisplayed = 10_000
-	)
+	const maxDisplayed = 5000
 
-	type processedChunk struct {
-		index int
-		data  string
-	}
-
-	numChunks := (len(initialLogs) + chunkSize - 1) / chunkSize
-	chunkChan := make(chan processedChunk, numChunks)
-	chunks := make([]processedChunk, numChunks)
-
-	var wg sync.WaitGroup
-	wg.Add(numChunks)
-
-	// Process logs in chunks
-	for i := 0; i < numChunks; i++ {
-		go func(index int) {
-			defer wg.Done()
-			start := index * chunkSize
-			end := (index + 1) * chunkSize
-			if end > len(initialLogs) {
-				end = len(initialLogs)
-			}
-			chunk := initialLogs[start:end]
-			highlightedChunk := dc.highlightLogs(chunk)
-			chunkChan <- processedChunk{index: index, data: highlightedChunk}
-		}(i)
-	}
-
-	// Collect processed chunks
-	go func() {
-		for chunk := range chunkChan {
-			chunks[chunk.index] = chunk
-		}
-	}()
-
-	go func() {
-		wg.Wait()
-		close(chunkChan)
-	}()
-
-	wg.Wait()
-
-	var sb strings.Builder
-	sb.Grow(len(initialLogs) * 100)
-	for _, chunk := range chunks {
-		sb.WriteString(chunk.data)
-	}
-
-	allLogs := sb.String()
+	allLogs := dc.highlightLogs(initialLogs)
 	lastLogs := getLastNLines(allLogs, maxDisplayed)
 
 	app.QueueUpdateDraw(func() {
@@ -331,7 +280,67 @@ func (dc *DockerWrapper) ListenForNewLogs(ctx context.Context, id string, app *t
 	}
 	defer liveLogs.Close()
 
-	dc.streamLogs(ctx, liveLogs, app, textView, scrollOnNewLogEntry)
+	logChan := make(chan string, 1000)
+
+	go func() {
+		header := make([]byte, 8)
+		buffer := &bytes.Buffer{}
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				_, err := io.ReadFull(liveLogs, header)
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					fmt.Fprintf(os.Stderr, "Error reading log header: %v\n", err)
+					return
+				}
+
+				logMessage, err := dc.readLogMessage(liveLogs, header)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error reading log message: %v\n", err)
+					return
+				}
+
+				buffer.Write(logMessage)
+
+				if buffer.Len() > 1024 || bytes.Count(logMessage, []byte{'\n'}) > 0 {
+					logChan <- buffer.String()
+					buffer.Reset()
+				}
+			}
+		}
+	}()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	var logBuffer strings.Builder
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case logMsg := <-logChan:
+			logBuffer.WriteString(logMsg)
+		case <-ticker.C:
+			if logBuffer.Len() > 0 {
+				logContent := logBuffer.String()
+				logBuffer.Reset()
+
+				app.QueueUpdateDraw(func() {
+					fmt.Fprint(tview.ANSIWriter(textView), dc.highlightLogs(logContent))
+					if *scrollOnNewLogEntry {
+						textView.ScrollToEnd()
+					}
+				})
+			}
+		}
+	}
 }
 
 func getLastNLines(s string, n int) string {
@@ -445,6 +454,10 @@ func (dc *DockerWrapper) readLogMessage(out io.Reader, header []byte) ([]byte, e
 }
 
 func (dc *DockerWrapper) highlightLogs(logs string) string {
+	if strings.Contains(logs, "\x1b[") {
+		return logs
+	}
+
 	var highlightedBuffer bytes.Buffer
 	err := quick.Highlight(&highlightedBuffer, logs, "Docker", "terminal16m", "monokai")
 	if err != nil {
